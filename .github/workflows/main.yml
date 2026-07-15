@@ -34,6 +34,8 @@ jobs:
         alias: ${{ secrets.KEY_ALIAS }}
         keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
         keyPassword: ${{ secrets.KEY_PASSWORD }}
+        # FIX: Point to a modern build tools version installed on the runner
+        buildToolsVersion: "34.0.0" 
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
