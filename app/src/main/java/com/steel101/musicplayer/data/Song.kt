@@ -1,0 +1,32 @@
+package com.steel101.musicplayer.data
+
+import android.net.Uri
+
+data class Song(
+    val id: Long,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val duration: Long,
+    val uri: Uri,
+    val albumId: Long,
+    val trackNumber: Int = 0,
+    val year: Int = 0,
+    val path: String = "",
+    val filename: String = "",
+    val artistMbid: String? = null,
+    val albumMbid: String? = null,
+    val artistImageUrl: String? = null,
+    val albumImageUrl: String? = null,
+    val backImageUrl: String? = null,
+    val genre: String? = null,
+    val hasEmbeddedArt: Boolean = false,
+    val isHidden: Boolean = false,
+    val manualOverride: Boolean = false,
+    val isFavorite: Boolean = false,
+    val playCount: Int = 0,
+    val lastPlayed: Long = 0,
+    val totalPlayTimeMs: Long = 0,
+    val dateAdded: Long = 0,
+    val manualNotPodcast: Boolean = false
+)

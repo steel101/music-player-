@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">music player</string>
+    <string name="audio_playback_attribution_label">Audio playback</string>
+</resources>

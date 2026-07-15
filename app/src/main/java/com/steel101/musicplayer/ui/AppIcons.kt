@@ -1,0 +1,877 @@
+package com.steel101.musicplayer.ui
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.unit.dp
+
+object AppIcons {
+    val MusicNote = buildIcon("MusicNote") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(12f, 3f)
+            verticalLineToRelative(10.55f)
+            curveToRelative(-0.59f, -0.34f, -1.27f, -0.55f, -2f, -0.55f)
+            curveToRelative(-2.21f, 0f, -4f, 1.79f, -4f, 4f)
+            reflectiveCurveToRelative(1.79f, 4f, 4f, 4f)
+            reflectiveCurveToRelative(4f, -1.79f, 4f, -4f)
+            verticalLineTo(7f)
+            horizontalLineToRelative(4f)
+            verticalLineTo(3f)
+            horizontalLineToRelative(-6f)
+            close()
+        }
+    }
+
+    val Album = buildIcon("Album") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(12f, 2f)
+            curveTo(6.48f, 2f, 2f, 6.48f, 2f, 12f)
+            reflectiveCurveToRelative(4.48f, 10f, 10f, 10f)
+            reflectiveCurveToRelative(10f, -4.48f, 10f, -10f)
+            reflectiveCurveTo(17.52f, 2f, 12f, 2f)
+            close()
+            moveTo(12f, 16.5f)
+            curveToRelative(-2.48f, 0f, -4.5f, -2.02f, -4.5f, -4.5f)
+            reflectiveCurveTo(9.52f, 7.5f, 12f, 7.5f)
+            reflectiveCurveToRelative(4.5f, 2.02f, 4.5f, 4.5f)
+            reflectiveCurveToRelative(-2.02f, 4.5f, -4.5f, 4.5f)
+            close()
+            moveTo(12f, 11f)
+            curveToRelative(-0.83f, 0f, -1.5f, 0.67f, -1.5f, 1.5f)
+            reflectiveCurveToRelative(0.67f, 1.5f, 1.5f, 1.5f)
+            reflectiveCurveToRelative(1.5f, -0.67f, 1.5f, -1.5f)
+            reflectiveCurveToRelative(-0.67f, -1.5f, -1.5f, -1.5f)
+            close()
+        }
+    }
+
+    val Pause = buildIcon("Pause") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(6f, 19f)
+            horizontalLineToRelative(4f)
+            verticalLineTo(5f)
+            horizontalLineTo(6f)
+            verticalLineToRelative(14f)
+            close()
+            moveTo(14f, 5f)
+            verticalLineToRelative(14f)
+            horizontalLineToRelative(4f)
+            verticalLineTo(5f)
+            horizontalLineToRelative(-4f)
+            close()
+        }
+    }
+
+    val SkipNext = buildIcon("SkipNext") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(6f, 18f)
+            lineToRelative(8.5f, -6f)
+            lineTo(6f, 6f)
+            verticalLineToRelative(12f)
+            close()
+            moveTo(16f, 6f)
+            verticalLineToRelative(12f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(6f)
+            horizontalLineToRelative(-2f)
+            close()
+        }
+    }
+
+    val SkipPrevious = buildIcon("SkipPrevious") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(6f, 6f)
+            horizontalLineToRelative(2f)
+            verticalLineToRelative(12f)
+            horizontalLineTo(6f)
+            verticalLineTo(6f)
+            close()
+            moveTo(9.5f, 12f)
+            lineToRelative(8.5f, 6f)
+            verticalLineTo(6f)
+            lineToRelative(-8.5f, 6f)
+            close()
+        }
+    }
+
+    val Shuffle = buildIcon("Shuffle") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(10.59f, 9.17f)
+            lineTo(5.41f, 4f)
+            lineTo(4f, 5.41f)
+            lineToRelative(5.17f, 5.17f)
+            lineToRelative(1.42f, -1.41f)
+            close()
+            moveTo(14.5f, 4f)
+            lineToRelative(2.04f, 2.04f)
+            lineTo(4f, 18.59f)
+            lineTo(5.41f, 20f)
+            lineToRelative(12.55f, -12.54f)
+            lineTo(20f, 9.5f)
+            verticalLineTo(4f)
+            horizontalLineToRelative(-5.5f)
+            close()
+            moveTo(14.83f, 13.41f)
+            lineToRelative(-1.41f, 1.41f)
+            lineToRelative(3.13f, 3.13f)
+            lineTo(14.5f, 20f)
+            horizontalLineTo(20f)
+            verticalLineToRelative(-5.5f)
+            lineToRelative(-2.04f, 2.04f)
+            lineToRelative(-3.13f, -3.13f)
+            close()
+        }
+    }
+
+    val Repeat = buildIcon("Repeat") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(7f, 7f)
+            horizontalLineToRelative(10f)
+            verticalLineToRelative(3f)
+            lineToRelative(4f, -4f)
+            lineToRelative(-4f, -4f)
+            verticalLineToRelative(3f)
+            horizontalLineTo(5f)
+            verticalLineToRelative(6f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(7f)
+            close()
+            moveTo(17f, 17f)
+            horizontalLineTo(7f)
+            verticalLineToRelative(-3f)
+            lineToRelative(-4f, 4f)
+            lineToRelative(4f, 4f)
+            verticalLineToRelative(-3f)
+            horizontalLineToRelative(12f)
+            verticalLineToRelative(-6f)
+            horizontalLineToRelative(-2f)
+            verticalLineToRelative(4f)
+            close()
+        }
+    }
+
+    val RepeatOne = buildIcon("RepeatOne") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(7f, 7f)
+            horizontalLineToRelative(10f)
+            verticalLineToRelative(3f)
+            lineToRelative(4f, -4f)
+            lineToRelative(-4f, -4f)
+            verticalLineToRelative(3f)
+            horizontalLineTo(5f)
+            verticalLineToRelative(6f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(7f)
+            close()
+            moveTo(17f, 17f)
+            horizontalLineTo(7f)
+            verticalLineToRelative(-3f)
+            lineToRelative(-4f, 4f)
+            lineToRelative(4f, 4f)
+            verticalLineToRelative(-3f)
+            horizontalLineToRelative(12f)
+            verticalLineToRelative(-6f)
+            horizontalLineToRelative(-2f)
+            verticalLineToRelative(4f)
+            close()
+            moveTo(13f, 15f)
+            verticalLineTo(9f)
+            horizontalLineToRelative(-1f)
+            lineToRelative(-2f, 1f)
+            verticalLineToRelative(1f)
+            horizontalLineToRelative(1.5f)
+            verticalLineToRelative(4f)
+            horizontalLineTo(13f)
+            close()
+        }
+    }
+
+    val PlaylistPlay = buildIcon("PlaylistPlay") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(19f, 9f)
+            horizontalLineTo(2f)
+            verticalLineToRelative(2f)
+            horizontalLineToRelative(17f)
+            verticalLineTo(9f)
+            close()
+            moveTo(19f, 5f)
+            horizontalLineTo(2f)
+            verticalLineToRelative(2f)
+            horizontalLineToRelative(17f)
+            verticalLineTo(5f)
+            close()
+            moveTo(2f, 15f)
+            horizontalLineToRelative(13f)
+            verticalLineToRelative(-2f)
+            horizontalLineTo(2f)
+            verticalLineToRelative(2f)
+            close()
+            moveTo(17f, 13f)
+            verticalLineToRelative(6f)
+            lineToRelative(5f, -3f)
+            lineToRelative(-5f, -3f)
+            close()
+        }
+    }
+
+    val ExpandLess = buildIcon("ExpandLess") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(12f, 8f)
+            lineToRelative(-6f, 6f)
+            lineToRelative(1.41f, 1.41f)
+            lineTo(12f, 10.83f)
+            lineToRelative(4.59f, 4.58f)
+            lineTo(18f, 14f)
+            close()
+        }
+    }
+
+    val ExpandMore = buildIcon("ExpandMore") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(16.59f, 8.59f)
+            lineTo(12f, 13.17f)
+            lineTo(7.41f, 8.59f)
+            lineTo(6f, 10f)
+            lineToRelative(6f, 6f)
+            lineToRelative(6f, -6f)
+            close()
+        }
+    }
+
+    val LibraryMusic = buildIcon("LibraryMusic") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(20f, 2f)
+            horizontalLineTo(8f)
+            curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+            verticalLineToRelative(12f)
+            curveToRelative(0f, 1.1f, 0.9f, 2f, 2f, 2f)
+            horizontalLineToRelative(12f)
+            curveToRelative(1.1f, 0f, 2f, -0.9f, 2f, -2f)
+            verticalLineTo(4f)
+            curveToRelative(0f, -1.1f, -0.9f, -2f, -2f, -2f)
+            close()
+            moveTo(18f, 7f)
+            horizontalLineToRelative(-3f)
+            verticalLineToRelative(5.5f)
+            curveToRelative(0f, 1.38f, -1.12f, 2.5f, -2.5f, 2.5f)
+            reflectiveCurveTo(10f, 13.88f, 10f, 12.5f)
+            reflectiveCurveToRelative(1.12f, -2.5f, 2.5f, -2.5f)
+            curveToRelative(0.57f, 0f, 1.08f, 0.19f, 1.5f, 0.51f)
+            verticalLineTo(5f)
+            horizontalLineToRelative(4f)
+            verticalLineToRelative(2f)
+            close()
+            moveTo(4f, 6f)
+            horizontalLineTo(2f)
+            verticalLineToRelative(14f)
+            curveToRelative(0f, 1.1f, 0.9f, 2f, 2f, 2f)
+            horizontalLineToRelative(14f)
+            verticalLineToRelative(-2f)
+            horizontalLineTo(4f)
+            verticalLineTo(6f)
+            close()
+        }
+    }
+
+    val Label = buildIcon("Label") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(17.63f, 5.84f)
+            curveTo(17.27f, 5.33f, 16.67f, 5f, 16f, 5f)
+            lineTo(5f, 5.01f)
+            curveTo(3.9f, 5.01f, 3f, 5.9f, 3f, 7f)
+            verticalLineToRelative(10f)
+            curveToRelative(0f, 1.1f, 0.9f, 1.99f, 2f, 1.99f)
+            lineTo(16f, 19f)
+            curveToRelative(0.67f, 0f, 1.27f, -0.33f, 1.63f, -0.84f)
+            lineTo(22f, 12f)
+            lineToRelative(-4.37f, -6.16f)
+            close()
+        }
+    }
+
+    val Folder = buildIcon("Folder") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(10f, 4f)
+            horizontalLineTo(4f)
+            curveToRelative(-1.1f, 0f, -1.99f, 0.9f, -1.99f, 2f)
+            lineTo(2f, 18f)
+            curveToRelative(0f, 1.1f, 0.9f, 2f, 2f, 2f)
+            horizontalLineToRelative(16f)
+            curveToRelative(1.1f, 0f, 2f, -0.9f, 2f, -2f)
+            verticalLineTo(8f)
+            curveToRelative(0f, -1.1f, -0.9f, -2f, -2f, -2f)
+            horizontalLineToRelative(-8f)
+            lineToRelative(-2f, -2f)
+            close()
+        }
+    }
+
+    val Event = buildIcon("Event") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(17f, 12f)
+            horizontalLineToRelative(-5f)
+            verticalLineToRelative(5f)
+            horizontalLineToRelative(5f)
+            verticalLineToRelative(-5f)
+            close()
+            moveTo(16f, 1f)
+            horizontalLineToRelative(-2f)
+            verticalLineToRelative(2f)
+            horizontalLineTo(8f)
+            verticalLineTo(1f)
+            horizontalLineTo(6f)
+            verticalLineToRelative(2f)
+            horizontalLineTo(5f)
+            curveToRelative(-1.11f, 0f, -1.99f, 0.9f, -1.99f, 2f)
+            lineTo(3f, 19f)
+            curveToRelative(0f, 1.1f, 0.89f, 2f, 2f, 2f)
+            horizontalLineToRelative(14f)
+            curveToRelative(1.1f, 0f, 2f, -0.9f, 2f, -2f)
+            verticalLineTo(5f)
+            curveToRelative(0f, -1.1f, -0.9f, -2f, -2f, -2f)
+            horizontalLineToRelative(-1f)
+            verticalLineTo(1f)
+            close()
+            moveTo(19f, 19f)
+            horizontalLineTo(5f)
+            verticalLineTo(8f)
+            horizontalLineToRelative(14f)
+            verticalLineTo(19f)
+            close()
+        }
+    }
+
+    val Podcasts = buildIcon("Podcasts") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(12f, 8f)
+            curveToRelative(-2.21f, 0f, -4f, 1.79f, -4f, 4f)
+            reflectiveCurveToRelative(1.79f, 4f, 4f, 4f)
+            reflectiveCurveToRelative(4f, -1.79f, 4f, -4f)
+            reflectiveCurveToRelative(-1.79f, -4f, -4f, -4f)
+            close()
+            moveTo(20.94f, 19f)
+            curveToRelative(-0.46f, 0f, -0.9f, -0.2f, -1.2f, -0.55f)
+            curveToRelative(-1.53f, -1.75f, -2.4f, -3.95f, -2.4f, -6.29f)
+            reflectiveCurveToRelative(0.87f, -4.54f, 2.4f, -6.29f)
+            curveToRelative(0.47f, -0.54f, 1.3f, -0.59f, 1.83f, -0.12f)
+            curveToRelative(0.54f, 0.47f, 0.58f, 1.3f, 0.12f, 1.83f)
+            curveToRelative(-1.21f, 1.38f, -1.9f, 3.12f, -1.9f, 4.58f)
+            reflectiveCurveToRelative(0.69f, 3.21f, 1.9f, 4.58f)
+            curveToRelative(0.46f, 0.53f, 0.42f, 1.36f, -0.11f, 1.82f)
+            curveToRelative(-0.19f, 0.18f, -0.46f, 0.29f, -0.64f, 0.29f)
+            close()
+            moveTo(3.06f, 19f)
+            curveToRelative(-0.18f, 0f, -0.45f, -0.11f, -0.64f, -0.29f)
+            curveToRelative(-0.53f, -0.46f, -0.57f, -1.29f, -0.11f, -1.82f)
+            curveToRelative(1.21f, -1.38f, 1.9f, -3.12f, 1.9f, -4.58f)
+            reflectiveCurveToRelative(-0.69f, -3.21f, -1.9f, -4.58f)
+            curveToRelative(-0.46f, -0.53f, -0.42f, -1.36f, 0.11f, -1.82f)
+            curveToRelative(0.53f, -0.47f, 1.36f, -0.42f, 1.83f, 0.12f)
+            curveToRelative(1.53f, 1.75f, 2.4f, 3.95f, 2.4f, 6.29f)
+            reflectiveCurveToRelative(-0.87f, 4.54f, -2.4f, 6.29f)
+            curveToRelative(-0.31f, 0.35f, -0.74f, 0.55f, -1.2f, 0.55f)
+            close()
+            moveTo(12f, 2f)
+            curveTo(6.48f, 2f, 2f, 6.48f, 2f, 12f)
+            curveToRelative(0f, 2.82f, 1.17f, 5.38f, 3.07f, 7.22f)
+            curveToRelative(0.48f, 0.46f, 1.3f, 0.43f, 1.76f, -0.05f)
+            curveToRelative(0.46f, -0.48f, 0.43f, -1.3f, -0.05f, -1.76f)
+            curveTo(5.23f, 15.93f, 4.5f, 14.05f, 4.5f, 12f)
+            curveToRelative(0f, -4.14f, 3.36f, -7.5f, 7.5f, -7.5f)
+            reflectiveCurveToRelative(7.5f, 3.36f, 7.5f, 7.5f)
+            curveToRelative(0f, 2.05f, -0.73f, 3.93f, -1.28f, 5.41f)
+            curveToRelative(-0.48f, 0.46f, -0.51f, 1.28f, -0.05f, 1.76f)
+            curveToRelative(0.46f, 0.48f, 1.28f, 0.51f, 1.76f, 0.05f)
+            curveTo(20.83f, 17.38f, 22f, 14.82f, 22f, 12f)
+            curveToRelative(0f, -5.52f, -4.48f, -10f, -10f, -10f)
+            close()
+        }
+    }
+
+    val BarChart = buildIcon("BarChart") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(5f, 9.2f)
+            horizontalLineToRelative(3f)
+            verticalLineTo(19f)
+            horizontalLineTo(5f)
+            close()
+            moveTo(10.6f, 5f)
+            horizontalLineToRelative(2.8f)
+            verticalLineToRelative(14f)
+            horizontalLineToRelative(-2.8f)
+            close()
+            moveTo(16.2f, 13f)
+            horizontalLineTo(19f)
+            verticalLineToRelative(6f)
+            horizontalLineToRelative(-2.8f)
+            close()
+        }
+    }
+
+    val History = buildIcon("History") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(13f, 3f)
+            curveToRelative(-4.97f, 0f, -9f, 4.03f, -9f, 9f)
+            horizontalLineTo(1f)
+            lineToRelative(3.89f, 3.89f)
+            lineToRelative(0.07f, 0.14f)
+            lineTo(9f, 12f)
+            horizontalLineTo(6f)
+            curveToRelative(0f, -3.87f, 3.13f, -7f, 7f, -7f)
+            reflectiveCurveToRelative(7f, 3.13f, 7f, 7f)
+            reflectiveCurveToRelative(-3.13f, 7f, -7f, 7f)
+            curveToRelative(-1.93f, 0f, -3.68f, -0.79f, -4.94f, -2.06f)
+            lineToRelative(-1.42f, 1.42f)
+            curveTo(8.27f, 19.99f, 10.51f, 21f, 13f, 21f)
+            curveToRelative(4.97f, 0f, 9f, -4.03f, 9f, -9f)
+            reflectiveCurveToRelative(-4.03f, -9f, -9f, -9f)
+            close()
+            moveTo(12f, 8f)
+            verticalLineToRelative(5f)
+            lineToRelative(4.28f, 2.54f)
+            lineToRelative(0.72f, -1.21f)
+            lineToRelative(-3.5f, -2.08f)
+            verticalLineTo(8f)
+            horizontalLineTo(12f)
+            close()
+        }
+    }
+
+    val NewReleases = buildIcon("NewReleases") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(23f, 12f)
+            lineToRelative(-2.44f, -2.78f)
+            lineToRelative(0.34f, -3.68f)
+            lineToRelative(-3.61f, -0.82f)
+            lineToRelative(-1.89f, -3.18f)
+            lineTo(12f, 3f)
+            lineTo(8.6f, 1.54f)
+            lineTo(6.71f, 4.72f)
+            lineToRelative(-3.61f, 0.81f)
+            lineToRelative(0.34f, 3.68f)
+            lineTo(1f, 12f)
+            lineToRelative(2.44f, 2.78f)
+            lineToRelative(-0.34f, 3.69f)
+            lineToRelative(3.61f, 0.82f)
+            lineToRelative(1.89f, 3.18f)
+            lineTo(12f, 21f)
+            lineToRelative(3.4f, 1.46f)
+            lineToRelative(1.89f, -3.18f)
+            lineToRelative(3.61f, -0.82f)
+            lineToRelative(-0.34f, -3.68f)
+            lineTo(23f, 12f)
+            close()
+            moveTo(13f, 17f)
+            horizontalLineToRelative(-2f)
+            verticalLineToRelative(-2f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(17f)
+            close()
+            moveTo(13f, 13f)
+            horizontalLineToRelative(-2f)
+            verticalLineTo(7f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(13f)
+            close()
+        }
+    }
+
+    val Insights = buildIcon("Insights") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(21f, 8f)
+            curveToRelative(-1.45f, 0f, -2.26f, 1.44f, -1.93f, 2.51f)
+            lineToRelative(-3.55f, 3.56f)
+            curveToRelative(-0.3f, -0.09f, -0.74f, -0.09f, -1.04f, 0f)
+            lineToRelative(-2.55f, -2.55f)
+            curveTo(12.26f, 10.44f, 11.45f, 9f, 10f, 9f)
+            reflectiveCurveToRelative(-2.26f, 1.44f, -1.93f, 2.51f)
+            lineToRelative(-4.56f, 4.56f)
+            curveTo(2.44f, 15.74f, 1f, 16.55f, 1f, 18f)
+            reflectiveCurveToRelative(1.44f, 2.26f, 2.51f, 1.93f)
+            lineToRelative(4.56f, -4.56f)
+            curveToRelative(0.3f, 0.09f, 0.74f, 0.09f, 1.04f, 0f)
+            lineToRelative(2.55f, 2.55f)
+            curveTo(11.34f, 18.26f, 12.15f, 19.7f, 13.6f, 19.7f)
+            reflectiveCurveToRelative(2.26f, -1.44f, 1.93f, -2.51f)
+            lineToRelative(3.55f, -3.56f)
+            curveToRelative(0.3f, 0.09f, 0.74f, 0.09f, 1.04f, 0f)
+            lineToRelative(4.37f, 4.37f)
+            curveTo(24.16f, 17.66f, 25.6f, 16.85f, 25.6f, 15.4f)
+            reflectiveCurveToRelative(-1.44f, -2.26f, -2.51f, -1.93f)
+            lineToRelative(-4.37f, -4.37f)
+            curveTo(19.04f, 8.74f, 20.45f, 8f, 21f, 8f)
+            close()
+            moveTo(15f, 9f)
+            lineToRelative(1.19f, -2.19f)
+            lineTo(18.38f, 5.62f)
+            lineTo(16.19f, 4.43f)
+            lineTo(15f, 2.25f)
+            lineToRelative(-1.19f, 2.18f)
+            lineToRelative(-2.19f, 1.19f)
+            lineToRelative(2.19f, 1.19f)
+            lineTo(15f, 9f)
+            close()
+            moveTo(23.12f, 6.12f)
+            lineTo(22f, 4f)
+            lineToRelative(-1.12f, 2.12f)
+            lineTo(18.75f, 7.25f)
+            lineTo(20.88f, 8.38f)
+            lineTo(22f, 10.5f)
+            lineToRelative(1.12f, -2.12f)
+            lineToRelative(2.13f, -1.13f)
+            lineToRelative(-2.13f, -1.13f)
+            close()
+        }
+    }
+
+    val Sort = buildIcon("Sort") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(3f, 18f)
+            horizontalLineToRelative(6f)
+            verticalLineToRelative(-2f)
+            horizontalLineTo(3f)
+            verticalLineTo(18f)
+            close()
+            moveTo(3f, 6f)
+            verticalLineToRelative(2f)
+            horizontalLineToRelative(18f)
+            verticalLineTo(6f)
+            horizontalLineTo(3f)
+            close()
+            moveTo(3f, 13f)
+            horizontalLineToRelative(12f)
+            verticalLineToRelative(-2f)
+            horizontalLineTo(3f)
+            verticalLineTo(13f)
+            close()
+        }
+    }
+
+    val Edit = buildIcon("Edit") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(3f, 17.25f)
+            verticalLineTo(21f)
+            horizontalLineToRelative(3.75f)
+            lineTo(17.81f, 9.94f)
+            lineToRelative(-3.75f, -3.75f)
+            lineTo(3f, 17.25f)
+            close()
+            moveTo(20.71f, 7.04f)
+            curveToRelative(0.39f, -0.39f, 0.39f, -1.02f, 0f, -1.41f)
+            lineToRelative(-2.34f, -2.34f)
+            curveToRelative(-0.39f, -0.39f, -1.02f, -0.39f, -1.41f, 0f)
+            lineToRelative(-1.83f, 1.83f)
+            lineToRelative(3.75f, 3.75f)
+            lineToRelative(1.83f, -1.83f)
+            close()
+        }
+    }
+
+    val AutoFixHigh = buildIcon("AutoFixHigh") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(20f, 7f)
+            lineToRelative(0.94f, -2.06f)
+            lineTo(23f, 4f)
+            lineToRelative(-2.06f, -0.94f)
+            lineTo(20f, 1f)
+            lineToRelative(-0.94f, 2.06f)
+            lineTo(17f, 4f)
+            lineToRelative(2.06f, 0.94f)
+            lineTo(20f, 7f)
+            close()
+            moveTo(8.5f, 7f)
+            lineToRelative(0.94f, -2.06f)
+            lineTo(11.5f, 4f)
+            lineToRelative(-2.06f, -0.94f)
+            lineTo(8.5f, 1f)
+            lineToRelative(-0.94f, 2.06f)
+            lineTo(5.5f, 4f)
+            lineToRelative(2.06f, 0.94f)
+            lineTo(8.5f, 7f)
+            close()
+            moveTo(20f, 12.5f)
+            lineToRelative(-0.94f, 2.06f)
+            lineTo(17f, 15.5f)
+            lineToRelative(2.06f, 0.94f)
+            lineTo(20f, 18.5f)
+            lineToRelative(0.94f, -2.06f)
+            lineTo(23f, 15.5f)
+            lineToRelative(-2.06f, -0.94f)
+            lineTo(20f, 12.5f)
+            close()
+            moveTo(17.71f, 9.12f)
+            lineToRelative(-2.83f, -2.83f)
+            curveToRelative(-0.39f, -0.39f, -1.02f, -0.39f, -1.41f, 0f)
+            lineTo(2.29f, 17.46f)
+            curveToRelative(-0.39f, 0.39f, -0.39f, 1.02f, 0f, 1.41f)
+            lineToRelative(2.83f, 2.83f)
+            curveToRelative(0.39f, 0.39f, 1.02f, 0.39f, 1.41f, 0f)
+            lineTo(17.71f, 10.53f)
+            curveToRelative(0.39f, -0.39f, 0.39f, -1.02f, 0f, -1.41f)
+            close()
+            moveTo(14.59f, 10.59f)
+            lineToRelative(-1.18f, -1.18f)
+            lineToRelative(1.41f, -1.41f)
+            lineToRelative(1.18f, 1.18f)
+            lineToRelative(-1.41f, 1.41f)
+            close()
+        }
+    }
+
+    val Image = buildIcon("Image") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(21f, 19f)
+            verticalLineTo(5f)
+            curveToRelative(0f, -1.1f, -0.9f, -2f, -2f, -2f)
+            horizontalLineTo(5f)
+            curveToRelative(-1.1f, 0f, -2f, 0.9f, -2f, 2f)
+            verticalLineToRelative(14f)
+            curveToRelative(0f, 1.1f, 0.9f, 2f, 2f, 2f)
+            horizontalLineToRelative(14f)
+            curveToRelative(1.1f, 0f, 2f, -0.9f, 2f, -2f)
+            close()
+            moveTo(8.5f, 13.5f)
+            lineToRelative(2.5f, 3.01f)
+            lineTo(14.5f, 12f)
+            lineToRelative(4.5f, 6f)
+            horizontalLineTo(5f)
+            lineToRelative(3.5f, -4.5f)
+            close()
+        }
+    }
+
+    val Lyrics = buildIcon("Lyrics") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(15f, 4f)
+            verticalLineToRelative(7f)
+            horizontalLineTo(6f)
+            verticalLineTo(4f)
+            horizontalLineTo(15f)
+            close()
+            moveTo(21f, 12f)
+            verticalLineTo(2f)
+            horizontalLineTo(3f)
+            verticalLineToRelative(18f)
+            lineToRelative(4f, -4f)
+            horizontalLineToRelative(14f)
+            verticalLineTo(12f)
+            close()
+            moveTo(18f, 14f)
+            horizontalLineTo(7.17f)
+            lineTo(6f, 15.17f)
+            verticalLineTo(14f)
+            horizontalLineTo(5f)
+            verticalLineTo(4f)
+            horizontalLineToRelative(1f)
+            verticalLineToRelative(7f)
+            horizontalLineToRelative(10f)
+            verticalLineTo(4f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(14f)
+            close()
+            moveTo(9f, 7f)
+            horizontalLineToRelative(5f)
+            verticalLineTo(6f)
+            horizontalLineTo(9f)
+            verticalLineTo(7f)
+            close()
+            moveTo(9f, 9f)
+            horizontalLineToRelative(5f)
+            verticalLineTo(8f)
+            horizontalLineTo(9f)
+            verticalLineTo(9f)
+            close()
+        }
+    }
+
+    val EditNote = buildIcon("EditNote") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(3f, 10f)
+            horizontalLineToRelative(11f)
+            verticalLineToRelative(2f)
+            horizontalLineTo(3f)
+            verticalLineTo(10f)
+            close()
+            moveTo(3f, 6f)
+            horizontalLineToRelative(11f)
+            verticalLineToRelative(2f)
+            horizontalLineTo(3f)
+            verticalLineTo(6f)
+            close()
+            moveTo(3f, 14f)
+            horizontalLineToRelative(7f)
+            verticalLineToRelative(2f)
+            horizontalLineTo(3f)
+            verticalLineTo(14f)
+            close()
+            moveTo(20.59f, 11.59f)
+            lineToRelative(-1.18f, -1.18f)
+            curveToRelative(-0.39f, -0.39f, -1.02f, -0.39f, -1.41f, 0f)
+            lineTo(13f, 15.17f)
+            verticalLineTo(18f)
+            horizontalLineToRelative(2.83f)
+            lineToRelative(4.76f, -4.76f)
+            curveToRelative(0.39f, -0.39f, 0.39f, -1.02f, 0f, -1.41f)
+            close()
+            moveTo(15f, 17f)
+            horizontalLineToRelative(-1f)
+            verticalLineToRelative(-1f)
+            lineToRelative(3.59f, -3.59f)
+            lineToRelative(1f, 1f)
+            lineTo(15f, 17f)
+            close()
+        }
+    }
+
+    val Tune = buildIcon("Tune") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(3f, 17f)
+            verticalLineToRelative(2f)
+            horizontalLineToRelative(6f)
+            verticalLineToRelative(-2f)
+            horizontalLineTo(3f)
+            close()
+            moveTo(3f, 5f)
+            verticalLineToRelative(2f)
+            horizontalLineToRelative(10f)
+            verticalLineTo(5f)
+            horizontalLineTo(3f)
+            close()
+            moveTo(13f, 21f)
+            verticalLineToRelative(-2f)
+            horizontalLineToRelative(8f)
+            verticalLineToRelative(-2f)
+            horizontalLineToRelative(-8f)
+            verticalLineToRelative(-2f)
+            horizontalLineToRelative(-2f)
+            verticalLineToRelative(6f)
+            horizontalLineTo(13f)
+            close()
+            moveTo(7f, 9f)
+            verticalLineToRelative(2f)
+            horizontalLineTo(3f)
+            verticalLineToRelative(2f)
+            horizontalLineToRelative(4f)
+            verticalLineToRelative(2f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(9f)
+            horizontalLineTo(7f)
+            close()
+            moveTo(21f, 13f)
+            verticalLineToRelative(-2f)
+            horizontalLineTo(11f)
+            verticalLineToRelative(2f)
+            horizontalLineTo(21f)
+            close()
+            moveTo(15f, 9f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(7f)
+            horizontalLineToRelative(4f)
+            verticalLineTo(5f)
+            horizontalLineToRelative(-4f)
+            verticalLineTo(3f)
+            horizontalLineToRelative(-2f)
+            verticalLineTo(9f)
+            close()
+        }
+    }
+
+    val ChevronRight = buildIcon("ChevronRight") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(10f, 6f)
+            lineTo(8.59f, 7.41f)
+            lineTo(13.17f, 12f)
+            lineToRelative(-4.58f, 4.59f)
+            lineTo(10f, 18f)
+            lineToRelative(6f, -6f)
+            close()
+        }
+    }
+
+    val ArrowUpward = buildIcon("ArrowUpward") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(4f, 12f)
+            lineToRelative(1.41f, 1.41f)
+            lineTo(11f, 7.83f)
+            verticalLineTo(20f)
+            horizontalLineToRelative(2f)
+            verticalLineTo(7.83f)
+            lineToRelative(5.58f, 5.59f)
+            lineTo(20f, 12f)
+            lineToRelative(-8f, -8f)
+            close()
+        }
+    }
+
+    val HistoryEdu = buildIcon("HistoryEdu") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(9f, 4f)
+            verticalLineToRelative(3f)
+            horizontalLineToRelative(5f)
+            verticalLineToRelative(12f)
+            horizontalLineToRelative(3f)
+            verticalLineTo(4f)
+            horizontalLineTo(9f)
+            close()
+            moveTo(3f, 12f)
+            horizontalLineToRelative(3f)
+            verticalLineToRelative(7f)
+            horizontalLineTo(3f)
+            verticalLineToRelative(-7f)
+            close()
+        }
+    }
+
+    val QuestionMark = buildIcon("QuestionMark") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(11.07f, 12.85f)
+            curveToRelative(0.77f, -1.39f, 2.25f, -2.21f, 3.11f, -3.44f)
+            curveToRelative(0.91f, -1.29f, 0.4f, -3.7f, -2.18f, -3.7f)
+            curveToRelative(-1.69f, 0f, -2.52f, 1.28f, -2.87f, 2.34f)
+            lineTo(6.54f, 6.96f)
+            curveTo(7.25f, 4.83f, 9.18f, 3f, 11.99f, 3f)
+            curveToRelative(2.35f, 0f, 4.96f, 1.24f, 5.46f, 4.25f)
+            curveToRelative(0.33f, 2.01f, -0.81f, 3.38f, -2.09f, 5.08f)
+            curveToRelative(-1.09f, 1.45f, -1.13f, 2.1f, -1.13f, 3.13f)
+            horizontalLineToRelative(-2.4f)
+            curveToRelative(0f, -1.04f, 0.02f, -1.85f, 0.24f, -2.61f)
+            close()
+            moveTo(11f, 18f)
+            horizontalLineToRelative(3f)
+            verticalLineToRelative(3f)
+            horizontalLineToRelative(-3f)
+            verticalLineToRelative(-3f)
+            close()
+        }
+    }
+
+    val Download = buildIcon("Download") {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(19f, 9f)
+            horizontalLineToRelative(-4f)
+            verticalLineTo(3f)
+            horizontalLineTo(9f)
+            verticalLineToRelative(6f)
+            horizontalLineTo(5f)
+            lineToRelative(7f, 7f)
+            lineToRelative(7f, -7f)
+            close()
+            moveTo(5f, 18f)
+            verticalLineToRelative(2f)
+            horizontalLineToRelative(14f)
+            verticalLineToRelative(-2f)
+            horizontalLineTo(5f)
+            close()
+        }
+    }
+}
+
+private fun buildIcon(name: String, block: ImageVector.Builder.() -> Unit) =
+    ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply(block).build()

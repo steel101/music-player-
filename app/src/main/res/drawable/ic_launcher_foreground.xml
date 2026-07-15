@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- CD outer ring -->
+    <path
+        android:pathData="M50,14A36,36 0,1 0,86 50A36,36 0,1 0,50 14Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"/>
+
+    <!-- CD inner ring (center ring) -->
+    <path
+        android:pathData="M50,40A10,10 0,1 0,60 50A10,10 0,1 0,50 40Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000"/>
+
+    <!-- CD center hole -->
+    <path
+        android:pathData="M50,46A4,4 0,1 0,54 50A4,4 0,1 0,50 46Z"
+        android:fillColor="#FFFFFF"/>
+
+    <!-- Shine reflection 1 -->
+    <path
+        android:pathData="M43,15 L51,15 L37,42 L29,42 Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.4"/>
+
+    <!-- Shine reflection 2 -->
+    <path
+        android:pathData="M57,15 L65,15 L79,42 L71,42 Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.4"/>
+
+    <!-- Grooves (subtle details) -->
+    <path
+        android:pathData="M24,50A26,26 0,0 0,50 76"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:strokeAlpha="0.3"
+        android:fillColor="#00000000"/>
+    <path
+        android:pathData="M50,24A26,26 0,0 0,76 50"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:strokeAlpha="0.3"
+        android:fillColor="#00000000"/>
+
+    <!-- Double Musical Note (positioned on bottom right) -->
+    <!-- Note head 1 (Left) -->
+    <path
+        android:pathData="M40,84 C40,78.5 45.4,74 52,74 C58.6,74 64,78.5 64,84 C64,89.5 58.6,94 52,94 C45.4,94 40,89.5 40,84 Z"
+        android:fillColor="#FFFFFF"/>
+    <!-- Note head 2 (Right) -->
+    <path
+        android:pathData="M68,76 C68,70.5 73.4,66 80,66 C86.6,66 92,70.5 92,76 C92,81.5 86.6,86 80,86 C73.4,86 68,81.5 68,76 Z"
+        android:fillColor="#FFFFFF"/>
+    <!-- Stems and Connecting Beam -->
+    <path
+        android:pathData="M60,84 L60,40 L88,30 L88,76 L84,76 L84,36 L64,45 L64,84 Z"
+        android:fillColor="#FFFFFF"/>
+</vector>
