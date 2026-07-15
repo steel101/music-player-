@@ -38,6 +38,27 @@ A high-performance, feature-rich music player for Android designed for audiophil
 *   **Home Screen Widget:** Control your music and see what's playing without opening the app.
 *   **File Renaming:** Automatically rename messy filenames into clean `Artist - Title.mp3` formats based on metadata.
 
+## 🛡️ Privacy & Transparency
+This app respects your privacy. 
+*   **Local-First:** All playback and library management happen on your device.
+*   **External Services:** To provide a rich experience, the app communicates with the following third-party services for metadata, lyrics, and YouTube search:
+    *   **MusicBrainz / iTunes / TheAudioDB:** For album art, artist bios, and track metadata.
+    *   **LRCLib / Netease:** For synced lyrics.
+    *   **AcoustID:** For audio fingerprinting/identification.
+    *   **YouTube:** Search and extraction via the `NewPipeExtractor` library.
+*   **No Tracking:** No analytics, trackers, or ads are included.
+
+## 📜 License & Credits
+This project is licensed under the **GNU General Public License v3.0**. See the [LICENSE](LICENSE) file for details.
+
+### Libraries & Tools Used:
+*   [Jetpack Compose](https://developer.android.com/compose) - Modern UI toolkit.
+*   [Media3 / ExoPlayer](https://github.com/google/ExoPlayer) - High-performance audio engine.
+*   [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) - Lightweight YouTube extraction.
+*   [TagLib](https://github.com/kyant0/taglib-android) - Native metadata tagging.
+*   [Room](https://developer.android.com/training/data-storage/room) - SQLite object mapping.
+*   [Retrofit](https://github.com/square/retrofit) - Type-safe HTTP client.
+
 ## 🚀 Technical Highlights
 *   **Size Optimized:** Aggressively optimized to stay under **10MB** by stripping redundant libraries and native binaries.
 *   **Architecture:** Built using Modern Android Development (MAD) practices with Jetpack Compose, Kotlin Coroutines, and Room Database.
@@ -52,6 +73,7 @@ A high-performance, feature-rich music player for Android designed for audiophil
 ### 📥 How to build
 To generate the smallest possible version of this app for your device:
 1. Open the project in Android Studio.
-2. Select the `release` build variant.
-3. Run `./gradlew assembleRelease`.
-4. Your optimized APK will be in `app/build/outputs/apk/release/`.
+2. (Optional) To use your own AcoustID API key, add `ACOUSTID_KEY=your_key_here` to your `local.properties` file.
+3. Select the `release` build variant.
+4. Run `./gradlew assembleRelease`.
+5. Your optimized APK will be in `app/build/outputs/apk/release/`.
