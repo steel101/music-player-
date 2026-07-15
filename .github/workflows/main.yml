@@ -1,27 +1,33 @@
 name: Build and Sign APK
 
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch: # Allows manual button click
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Allows the runner to create a GitHub Release
+      
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Set up JDK
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
+
+    - name: Change wrapper permissions
+      run: chmod +x gradlew # Fixes the "Permission denied" error
 
     - name: Build Release APK
       run: ./gradlew assembleRelease
 
     - name: Sign Android APK
       uses: r0adkll/sign-android-release@v1
+      id: sign_app
       with:
         releaseDirectory: app/build/outputs/apk/release
         signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -29,8 +35,19 @@ jobs:
         keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
         keyPassword: ${{ secrets.KEY_PASSWORD }}
 
-    - name: Upload Signed APK
-      uses: actions/upload-artifact@v3
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
       with:
         name: Signed-Release-APK
-        path: app/build/outputs/apk/release/*.apk
+        path: ${{ steps.sign_app.outputs.signedReleaseFile }}
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: "v1.0.0-${{ github.run_number }}"
+        name: "Release v1.0.0 (Build #${{ github.run_number }})"
+        draft: false
+        prerelease: false
+        files: ${{ steps.sign_app.outputs.signedReleaseFile }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
