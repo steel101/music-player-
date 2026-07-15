@@ -3,6 +3,9 @@ name: Build and Sign APK
 on:
   workflow_dispatch: # Allows manual button click
 
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true # Safeguard against runner deprecation issues
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,6 +25,17 @@ jobs:
     - name: Change wrapper permissions
       run: chmod +x gradlew # Fixes the "Permission denied" error
 
+    - name: Extract App Version Name
+      id: get_version
+      run: |
+        # Pulls the exact version name string out of your build.gradle.kts file
+        VERSION_NAME=$(grep "versionName" app/build.gradle.kts | head -n 1 | awk -F'"' '{print $2}')
+        if [ -z "$VERSION_NAME" ]; then
+          # Fallback if your version name uses single quotes or direct assignment
+          VERSION_NAME=$(grep "versionName" app/build.gradle.kts | head -n 1 | awk -F"'" '{print $2}')
+        fi
+        echo "version=$VERSION_NAME" >> $GITHUB_OUTPUT
+
     - name: Build Release APK
       run: ./gradlew assembleRelease
 
@@ -35,7 +49,6 @@ jobs:
         keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
         keyPassword: ${{ secrets.KEY_PASSWORD }}
       env:
-        # FIX: Passes the correct environment variable to look for modern build tools
         BUILD_TOOLS_VERSION: "34.0.0" 
 
     - name: Upload Artifact
@@ -47,8 +60,9 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: "v1.0.0-${{ github.run_number }}"
-        name: "Release v1.0.0 (Build #${{ github.run_number }})"
+        # Dynamically uses the extracted version name for the tag and release title
+        tag_name: "v${{ steps.get_version.outputs.version }}"
+        name: "Release v${{ steps.get_version.outputs.version }} (Build #${{ github.run_number }})"
         draft: false
         prerelease: false
         files: ${{ steps.sign_app.outputs.signedReleaseFile }}
