@@ -62,7 +62,7 @@ jobs:
       with:
         # Dynamically uses the extracted version name for the tag and release title
         tag_name: "v${{ steps.get_version.outputs.version }}"
-        name: "Release v${{ steps.get_version.outputs.version }} (Build #${{ github.run_number }})"
+        name: "Release v${{ steps.get_version.outputs.version }}"
         draft: false
         prerelease: false
         files: ${{ steps.sign_app.outputs.signedReleaseFile }}

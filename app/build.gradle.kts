@@ -7,6 +7,12 @@ plugins {
 }
 
 android {
+    dependenciesInfo {
+        // Disables dependency metadata when       building APKs (for IzzyOnDroid/F-Droid)
+        includeInApk = false
+        // Disables dependency metadata when building Android App Bundles (for Google Play)
+        includeInBundle = false
+    }
     namespace = "com.steel101.musicplayer"
     compileSdk = 37
 
@@ -14,8 +20,8 @@ android {
         applicationId = "com.steel101.musicplayer"
         minSdk = 34
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.1"
+        versionCode = 2
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
