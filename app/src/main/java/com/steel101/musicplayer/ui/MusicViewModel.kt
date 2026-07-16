@@ -82,6 +82,25 @@ class MusicViewModel(
 
     private val sharedPrefs = context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
     
+    private val _isOfflineMode = MutableStateFlow(sharedPrefs.getBoolean("offline_mode", true))
+    val isOfflineMode: StateFlow<Boolean> = _isOfflineMode.asStateFlow()
+
+    private val _showOfflineOnboarding = MutableStateFlow(!sharedPrefs.contains("offline_mode"))
+    val showOfflineOnboarding: StateFlow<Boolean> = _showOfflineOnboarding.asStateFlow()
+
+    fun setOfflineMode(enabled: Boolean) {
+        _isOfflineMode.value = enabled
+        sharedPrefs.edit().putBoolean("offline_mode", enabled).apply()
+        _showOfflineOnboarding.value = false
+    }
+
+    fun dismissOfflineOnboarding() {
+        _showOfflineOnboarding.value = false
+        if (!sharedPrefs.contains("offline_mode")) {
+            sharedPrefs.edit().putBoolean("offline_mode", true).apply()
+        }
+    }
+
     private val _isAutoTagEnabled = MutableStateFlow(sharedPrefs.getBoolean("auto_tag_enabled", false))
     val isAutoTagEnabled: StateFlow<Boolean> = _isAutoTagEnabled.asStateFlow()
 
@@ -479,6 +498,7 @@ class MusicViewModel(
     val isFetchingMbTracks: State<Boolean> = _isFetchingMbTracks
 
     fun fetchAlbumTracksFromMusicBrainz(albumTitle: String, artistName: String) {
+        if (_isOfflineMode.value) return
         viewModelScope.launch {
             _isFetchingMbTracks.value = true
             _mbAlbumTracks.value = emptyList()
@@ -509,7 +529,7 @@ class MusicViewModel(
     val isSearchingYt: State<Boolean> = _isSearchingYt
 
     fun searchYoutube(query: String) {
-        if (query.isBlank()) return
+        if (query.isBlank() || _isOfflineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSearchingYt.value = true
             try {
@@ -589,7 +609,7 @@ class MusicViewModel(
     }
 
     fun fetchArtistInfo(artistName: String) {
-        if (artistName == "Unknown" || artistName == "<unknown>") return
+        if (artistName == "Unknown" || artistName == "<unknown>" || _isOfflineMode.value) return
         
         viewModelScope.launch {
             _isFetchingArtistInfo.value = true
@@ -1009,6 +1029,7 @@ class MusicViewModel(
     }
 
     private fun fetchLyrics(song: Song) {
+        if (_isOfflineMode.value) return
         viewModelScope.launch {
             try {
                 val localFile = File(context.filesDir, "lyrics_${song.id}.lrc")
@@ -1167,6 +1188,7 @@ class MusicViewModel(
     }
 
     fun playPreview(title: String, artist: String) {
+        if (_isOfflineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val youtube = ServiceList.YouTube
@@ -1183,6 +1205,7 @@ class MusicViewModel(
     }
 
     fun playYoutubePreview(item: StreamInfoItem) {
+        if (_isOfflineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val youtube = ServiceList.YouTube
@@ -1236,6 +1259,7 @@ class MusicViewModel(
     }
 
     suspend fun enrichMetadata(song: Song, forcedAlbumArt: String? = null) {
+        if (_isOfflineMode.value && forcedAlbumArt == null) return
         try {
             val cleanTitle = MetadataCleaner.cleanString(song.title)
             val cleanArtist = MetadataCleaner.cleanString(song.artist)
@@ -1399,6 +1423,7 @@ class MusicViewModel(
     val isSearching: State<Boolean> = _isSearching
 
     fun searchMetadata(title: String, artist: String) {
+        if (_isOfflineMode.value) return
         viewModelScope.launch {
             _isSearching.value = true
             try {
@@ -1484,12 +1509,14 @@ class MusicViewModel(
     fun applyManualMetadata(originalSong: Song, selectedMetadata: Song) {
         viewModelScope.launch {
             var artistImageUrl: String? = null
-            try {
-                val response = audioDbService.searchArtist(selectedMetadata.artist)
-                val artist = response.artists?.firstOrNull { it.name?.lowercase() == selectedMetadata.artist.lowercase() }
-                    ?: response.artists?.firstOrNull()
-                artistImageUrl = artist?.thumbUrl ?: artist?.fanartUrl
-            } catch (e: Exception) {}
+            if (!_isOfflineMode.value) {
+                try {
+                    val response = audioDbService.searchArtist(selectedMetadata.artist)
+                    val artist = response.artists?.firstOrNull { it.name?.lowercase() == selectedMetadata.artist.lowercase() }
+                        ?: response.artists?.firstOrNull()
+                    artistImageUrl = artist?.thumbUrl ?: artist?.fanartUrl
+                } catch (e: Exception) {}
+            }
 
             val updatedSong = originalSong.copy(
                 title = selectedMetadata.title,
@@ -1720,6 +1747,7 @@ class MusicViewModel(
     fun stop() { controller?.stop() }
 
     fun identifySong(song: Song) {
+        if (_isOfflineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
             try {

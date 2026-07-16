@@ -1314,6 +1314,27 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                     )
                 }
 
+                val showOnboarding by viewModel.showOfflineOnboarding.collectAsState()
+                if (showOnboarding) {
+                    AlertDialog(
+                        onDismissRequest = { viewModel.dismissOfflineOnboarding() },
+                        title = { Text("Online Features") },
+                        text = {
+                            Text("This app can connect to the internet to fetch album art, lyrics, artist bios, and identify songs. Would you like to enable these features or stay offline?")
+                        },
+                        confirmButton = {
+                            Button(onClick = { viewModel.setOfflineMode(false) }) {
+                                Text("Enable Online Features")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { viewModel.setOfflineMode(true) }) {
+                                Text("Stay Offline")
+                            }
+                        }
+                    )
+                }
+
                 if (showQueueSheet) {
                     ModalBottomSheet(
                         onDismissRequest = { showQueueSheet = false },
@@ -3604,6 +3625,20 @@ fun SettingsView(viewModel: MusicViewModel) {
 
         Text("Library", style = MaterialTheme.typography.titleMedium, color = Color.Yellow)
         Spacer(Modifier.height(8.dp))
+
+        ListItem(
+            headlineContent = { Text("Offline Mode", color = Color.Yellow) },
+            supportingContent = { Text("Disable all internet-reliant features (metadata fetching, YouTube search, etc.)", color = Color.Yellow.copy(alpha = 0.7f)) },
+            trailingContent = {
+                val isOffline by viewModel.isOfflineMode.collectAsState()
+                Switch(
+                    checked = isOffline,
+                    onCheckedChange = { viewModel.setOfflineMode(it) },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.Yellow, checkedTrackColor = Color.Yellow.copy(alpha = 0.5f))
+                )
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Black.copy(alpha = 0.2f))
+        )
         
         ListItem(
             headlineContent = { Text("Auto-write to disk", color = Color.Yellow) },
