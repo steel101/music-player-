@@ -7,8 +7,12 @@
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
 -keepattributes RuntimeInvisibleAnnotations, RuntimeInvisibleParameterAnnotations
+-keepattributes AnnotationDefault
 
--keepclassmembers class retrofit2.** {
+-keep class com.steel101.musicplayer.network.** { *; }
+-keep interface com.steel101.musicplayer.network.** { *; }
+
+-keepclassmembers class * {
     @retrofit2.http.* <methods>;
 }
 -dontwarn retrofit2.**
@@ -16,23 +20,22 @@
 -keep class com.google.gson.** { *; }
 -keep class com.google.common.util.concurrent.** { *; }
 
--keepclassmembers class com.steel101.musicplayer.network.** {
-    <fields>;
-}
--keepclassmembers class com.steel101.musicplayer.data.Song {
-    <fields>;
-}
--keepclassmembers class com.steel101.musicplayer.ui.MusicViewModel$LyricLine {
-    <fields>;
-}
+-keep class com.steel101.musicplayer.data.Song { *; }
+-keep class com.steel101.musicplayer.ui.MusicViewModel$LyricLine { *; }
 
 -keep class org.schabi.newpipe.extractor.** { *; }
 -keep class org.mozilla.javascript.** { *; }
 -keep class org.mozilla.classfile.ClassFileWriter
+-keep class org.jsoup.** { *; }
 -dontwarn org.mozilla.javascript.tools.**
 -dontwarn java.beans.**
 -dontwarn jdk.dynalink.**
 -dontwarn javax.script.**
+
+-keep class com.kyant.taglib.** { *; }
+-keepclassmembers class com.kyant.taglib.** {
+    native <methods>;
+}
 
 -assumenosideeffects class android.util.Log {
     public static *** d(...);

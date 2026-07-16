@@ -76,6 +76,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
     val selectedGenre by viewModel.selectedGenre.collectAsState()
     val selectedDecade by viewModel.selectedDecade.collectAsState()
     val dominantColor by viewModel.dominantColor
+    val isOnline by viewModel.isOnlineMode.collectAsState()
 
     val animatedBgColor by animateColorAsState(
         targetValue = Color(dominantColor).copy(alpha = 0.98f),
@@ -84,6 +85,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
     )
 
     val playlists by viewModel.playlists.collectAsState()
+    val gridColumns by viewModel.gridColumns.collectAsState()
     val pendingWriteRequest by viewModel.pendingWriteRequest
     val songListState = rememberLazyListState()
     val artistGridState = rememberLazyGridState()
@@ -191,7 +193,8 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                 MusicViewModel.View.FORGOTTEN_FAVORITES,
                 MusicViewModel.View.PODCASTS,
                 MusicViewModel.View.EQUALIZER, MusicViewModel.View.SETTINGS,
-                MusicViewModel.View.QUEUE, MusicViewModel.View.YT_SEARCH -> viewModel.setView(MusicViewModel.View.SONGS)
+                MusicViewModel.View.QUEUE, MusicViewModel.View.YT_SEARCH,
+                MusicViewModel.View.ABOUT -> viewModel.setView(MusicViewModel.View.SONGS)
 
                 else -> {}
             }
@@ -406,16 +409,18 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                         icon = { Icon(AppIcons.Insights, null) }
                     )
 
-                    NavigationDrawerItem(
-                        label = { Text("YouTube Search") },
-                        selected = currentView == MusicViewModel.View.YT_SEARCH,
-                        onClick = {
-                            viewModel.setView(MusicViewModel.View.YT_SEARCH)
-                            showFullPlayer = false
-                            scope.launch { drawerState.close() }
-                        },
-                        icon = { Icon(Icons.Default.Search, null) }
-                    )
+                    if (isOnline) {
+                        NavigationDrawerItem(
+                            label = { Text("YouTube Search") },
+                            selected = currentView == MusicViewModel.View.YT_SEARCH,
+                            onClick = {
+                                viewModel.setView(MusicViewModel.View.YT_SEARCH)
+                                showFullPlayer = false
+                                scope.launch { drawerState.close() }
+                            },
+                            icon = { Icon(Icons.Default.Search, null) }
+                        )
+                    }
 
                     Spacer(Modifier.weight(1f))
 
@@ -550,6 +555,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                                     MusicViewModel.View.PODCASTS -> "Podcasts"
                                                     MusicViewModel.View.EQUALIZER -> "Equalizer"
                                                     MusicViewModel.View.SETTINGS -> "Settings"
+                                                    MusicViewModel.View.ABOUT -> "About"
                                                     MusicViewModel.View.QUEUE -> "Up Next"
                                                     else -> "Music Player"
                                                 }
@@ -565,6 +571,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                         },
                                         actions = {
                                             if (currentView != MusicViewModel.View.SETTINGS && 
+                                                currentView != MusicViewModel.View.ABOUT &&
                                                 currentView != MusicViewModel.View.INSIGHTS && 
                                                 currentView != MusicViewModel.View.EQUALIZER && 
                                                 currentView != MusicViewModel.View.YT_SEARCH &&
@@ -590,11 +597,20 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                                         }
                                                     }
                                                 }
-                                                IconButton(onClick = { viewModel.manualRescan() }) {
-                                                    Icon(
-                                                        Icons.Default.Refresh,
-                                                        contentDescription = "Rescan Library"
-                                                    )
+                                                val isRefreshing by viewModel.isRefreshing.collectAsState()
+                                                IconButton(onClick = { viewModel.manualRescan() }, enabled = !isRefreshing) {
+                                                    if (isRefreshing) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.size(24.dp),
+                                                            strokeWidth = 2.dp,
+                                                            color = Color.Yellow
+                                                        )
+                                                    } else {
+                                                        Icon(
+                                                            Icons.Default.Refresh,
+                                                            contentDescription = "Rescan Library"
+                                                        )
+                                                    }
                                                 }
                                                 IconButton(onClick = { isSearchActive = true }) {
                                                     Icon(
@@ -772,7 +788,8 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
 
                                     MusicViewModel.View.ARTISTS -> {
                                         val artists = remember(songs) {
-                                            songs.groupBy { it.artist }.map { (name, songs) ->
+                                            songs.groupBy { it.artist.lowercase().trim() }.map { (_, songs) ->
+                                                val name = songs.first().artist
                                                 val firstWithArtistImage =
                                                     songs.find { it.artistImageUrl != null }
                                                 ArtistInfo(
@@ -804,7 +821,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                         Row(modifier = Modifier.fillMaxSize()) {
                                             LazyVerticalGrid(
                                                 state = artistGridState,
-                                                columns = GridCells.Adaptive(150.dp),
+                                                columns = GridCells.Fixed(gridColumns),
                                                 modifier = Modifier.weight(1f),
                                                 contentPadding = PaddingValues(16.dp),
                                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -813,6 +830,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                                 items(artists) { artist ->
                                                     ArtistGridItem(
                                                         artist = artist,
+                                                        gridColumns = gridColumns,
                                                         onClick = {
                                                             viewModel.setView(
                                                                 MusicViewModel.View.ARTIST_DETAIL,
@@ -883,8 +901,9 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
 
                                     MusicViewModel.View.ALBUMS -> {
                                         val albums = remember(songs) {
-                                            songs.groupBy { it.artist to it.album }.map { (key, songs) ->
-                                                val (artistName, title) = key
+                                            songs.groupBy { it.artist.lowercase().trim() to it.album.lowercase().trim() }.map { (_, songs) ->
+                                                val artistName = songs.first().artist
+                                                val title = songs.first().album
                                                 val firstWithImage =
                                                     songs.find { it.hasEmbeddedArt }
                                                         ?: songs.find { it.albumImageUrl != null }
@@ -927,7 +946,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                         Row(modifier = Modifier.fillMaxSize()) {
                                             LazyVerticalGrid(
                                                 state = albumGridState,
-                                                columns = GridCells.Adaptive(150.dp),
+                                                columns = GridCells.Fixed(gridColumns),
                                                 modifier = Modifier.weight(1f),
                                                 contentPadding = PaddingValues(16.dp),
                                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -936,9 +955,11 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                                 items(albums) { album ->
                                                     AlbumGridItem(
                                                         album = album,
+                                                        gridColumns = gridColumns,
                                                         onClick = {
                                                             viewModel.setView(
                                                                 MusicViewModel.View.ALBUM_DETAIL,
+                                                                artist = album.artist,
                                                                 album = album.title
                                                             )
                                                         },
@@ -1108,6 +1129,10 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                         YouTubeSearchView(viewModel = viewModel)
                                     }
 
+                                    MusicViewModel.View.ABOUT -> {
+                                        AboutView()
+                                    }
+
                                     else -> {}
                                 }
                             }
@@ -1167,7 +1192,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                             songOptions = null
                         },
                         onGoToAlbum = {
-                            viewModel.setView(MusicViewModel.View.ALBUM_DETAIL, album = songOptions!!.album)
+                            viewModel.setView(MusicViewModel.View.ALBUM_DETAIL, artist = songOptions!!.artist, album = songOptions!!.album)
                             songOptions = null
                         },
                         onIdentifySong = {
@@ -1182,7 +1207,8 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                             showDeleteConfirm = songOptions
                             songOptions = null
                         },
-                        onDismiss = { songOptions = null }
+                        onDismiss = { songOptions = null },
+                        isOnline = isOnline
                     )
                 }
 
@@ -1215,7 +1241,8 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                             viewModel.updateSongArtwork(songToEditArtwork!!, url)
                             songToEditArtwork = null
                         },
-                        onDismiss = { songToEditArtwork = null }
+                        onDismiss = { songToEditArtwork = null },
+                        isOnline = isOnline
                     )
                 }
 
@@ -1231,7 +1258,8 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                             viewModel.updateAlbumArtwork(albumToEditArtwork!!, url)
                             albumToEditArtwork = null
                         },
-                        onDismiss = { albumToEditArtwork = null }
+                        onDismiss = { albumToEditArtwork = null },
+                        isOnline = isOnline
                     )
                 }
 
@@ -1302,7 +1330,8 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                             viewModel.updateArtistImage(artistToEdit!!.name, url)
                             artistToEdit = null
                         },
-                        onDismiss = { artistToEdit = null }
+                        onDismiss = { artistToEdit = null },
+                        isOnline = isOnline
                     )
                 }
 
@@ -1314,21 +1343,21 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                     )
                 }
 
-                val showOnboarding by viewModel.showOfflineOnboarding.collectAsState()
+                val showOnboarding by viewModel.showOnlineOnboarding.collectAsState()
                 if (showOnboarding) {
                     AlertDialog(
-                        onDismissRequest = { viewModel.dismissOfflineOnboarding() },
+                        onDismissRequest = { viewModel.dismissOnlineOnboarding() },
                         title = { Text("Online Features") },
                         text = {
                             Text("This app can connect to the internet to fetch album art, lyrics, artist bios, and identify songs. Would you like to enable these features or stay offline?")
                         },
                         confirmButton = {
-                            Button(onClick = { viewModel.setOfflineMode(false) }) {
+                            Button(onClick = { viewModel.setOnlineMode(true) }) {
                                 Text("Enable Online Features")
                             }
                         },
                         dismissButton = {
-                            TextButton(onClick = { viewModel.setOfflineMode(true) }) {
+                            TextButton(onClick = { viewModel.setOnlineMode(false) }) {
                                 Text("Stay Offline")
                             }
                         }
@@ -1361,6 +1390,7 @@ fun ArtistBioDialog(
     val isLoadingBio by viewModel.isFetchingArtistInfo
     val isLoadingTracks by viewModel.isFetchingMbTracks
     val downloadingTracks by viewModel.downloadingTracks.collectAsState()
+    val isOnline by viewModel.isOnlineMode.collectAsState()
 
     var viewingAlbumTitle by remember { mutableStateOf<String?>(null) }
 
@@ -1377,7 +1407,9 @@ fun ArtistBioDialog(
             }
         },
         text = {
-            if (isLoadingBio || (viewingAlbumTitle != null && isLoadingTracks)) {
+            if (!isOnline) {
+                Text("Online Features disabled. Go to Settings to enable.")
+            } else if (isLoadingBio || (viewingAlbumTitle != null && isLoadingTracks)) {
                 Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -1710,7 +1742,8 @@ fun ArtistImageDialog(
     artist: ArtistInfo,
     onPickFromGallery: () -> Unit,
     onSetUrl: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isOnline: Boolean = true
 ) {
     var url by remember { mutableStateOf("") }
     AlertDialog(
@@ -1721,17 +1754,23 @@ fun ArtistImageDialog(
                 Button(onClick = onPickFromGallery, modifier = Modifier.fillMaxWidth()) {
                     Text("Pick from Gallery")
                 }
-                Text("OR", modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(), textAlign = TextAlign.Center)
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Image URL") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (isOnline) {
+                    Text("OR", modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(), textAlign = TextAlign.Center)
+                    OutlinedTextField(
+                        value = url,
+                        onValueChange = { url = it },
+                        label = { Text("Image URL") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text("Online Features disabled. URL option unavailable.", modifier = Modifier.padding(top = 16.dp).alpha(0.5f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (url.isNotBlank()) onSetUrl(url) }) { Text("Save URL") }
+            if (isOnline) {
+                TextButton(onClick = { if (url.isNotBlank()) onSetUrl(url) }) { Text("Save URL") }
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -1754,8 +1793,10 @@ fun SongOptionsDialog(
     onIdentifySong: () -> Unit,
     onSetGenre: () -> Unit,
     onDelete: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isOnline: Boolean = true
 ) {
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -1796,12 +1837,15 @@ fun SongOptionsDialog(
                     modifier = Modifier.clickable { onFixMetadata() }
                 )
                 ListItem(
-                    headlineContent = { Text("Identify Song (AcoustID)") },
-                    leadingContent = { Icon(AppIcons.AutoFixHigh, null) },
-                    modifier = Modifier.clickable { onIdentifySong() }
+                    headlineContent = { Text("Identify Song (AcoustID)", color = if (isOnline) Color.Unspecified else Color.Gray) },
+                    leadingContent = { Icon(AppIcons.AutoFixHigh, null, tint = if (isOnline) LocalContentColor.current else Color.Gray) },
+                    modifier = Modifier.clickable { 
+                        if (isOnline) onIdentifySong() 
+                        else android.widget.Toast.makeText(context, "Online Features disabled. Go to Settings to enable.", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 )
                 ListItem(
-                    headlineContent = { Text("Set Artwork from Local / URL") },
+                    headlineContent = { Text(if (isOnline) "Set Artwork from Local / URL" else "Set Artwork from Local") },
                     leadingContent = { Icon(AppIcons.Image, null) },
                     modifier = Modifier.clickable { onSetArtwork() }
                 )
@@ -1864,7 +1908,8 @@ fun SongArtworkDialog(
     song: Song,
     onPickFromGallery: () -> Unit,
     onSetUrl: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isOnline: Boolean = true
 ) {
     var url by remember { mutableStateOf("") }
     AlertDialog(
@@ -1875,17 +1920,23 @@ fun SongArtworkDialog(
                 Button(onClick = onPickFromGallery, modifier = Modifier.fillMaxWidth()) {
                     Text("Pick from Gallery")
                 }
-                Text("OR", modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(), textAlign = TextAlign.Center)
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Image URL") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (isOnline) {
+                    Text("OR", modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(), textAlign = TextAlign.Center)
+                    OutlinedTextField(
+                        value = url,
+                        onValueChange = { url = it },
+                        label = { Text("Image URL") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text("Online Features disabled. URL option unavailable.", modifier = Modifier.padding(top = 16.dp).alpha(0.5f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (url.isNotBlank()) onSetUrl(url) }) { Text("Save URL") }
+            if (isOnline) {
+                TextButton(onClick = { if (url.isNotBlank()) onSetUrl(url) }) { Text("Save URL") }
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -1899,7 +1950,8 @@ fun AlbumArtworkDialog(
     album: AlbumInfo,
     onPickFromGallery: () -> Unit,
     onSetUrl: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isOnline: Boolean = true
 ) {
     var url by remember { mutableStateOf("") }
     AlertDialog(
@@ -1910,17 +1962,23 @@ fun AlbumArtworkDialog(
                 Button(onClick = onPickFromGallery, modifier = Modifier.fillMaxWidth()) {
                     Text("Pick from Gallery")
                 }
-                Text("OR", modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(), textAlign = TextAlign.Center)
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = { url = it },
-                    label = { Text("Image URL") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (isOnline) {
+                    Text("OR", modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(), textAlign = TextAlign.Center)
+                    OutlinedTextField(
+                        value = url,
+                        onValueChange = { url = it },
+                        label = { Text("Image URL") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text("Online Features disabled. URL option unavailable.", modifier = Modifier.padding(top = 16.dp).alpha(0.5f), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (url.isNotBlank()) onSetUrl(url) }) { Text("Save URL") }
+            if (isOnline) {
+                TextButton(onClick = { if (url.isNotBlank()) onSetUrl(url) }) { Text("Save URL") }
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -2116,14 +2174,23 @@ fun FolderBrowserView(viewModel: MusicViewModel) {
 @Composable
 fun ArtistGridItem(
     artist: ArtistInfo,
+    gridColumns: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val imageSize = when(gridColumns) {
+        2 -> 140.dp
+        3 -> 100.dp
+        4 -> 80.dp
+        else -> 60.dp
+    }
+    val fontSize = if (gridColumns > 3) 12.sp else 14.sp
+
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(8.dp),
+            .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AsyncImage(
@@ -2133,8 +2200,8 @@ fun ArtistGridItem(
             error = rememberVectorPainter(Icons.Default.Person),
             fallback = rememberVectorPainter(Icons.Default.Person),
             modifier = Modifier
-                .size(120.dp)
-                .clip(RoundedCornerShape(60.dp))
+                .size(imageSize)
+                .clip(RoundedCornerShape(imageSize / 2))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
         )
@@ -2144,12 +2211,14 @@ fun ArtistGridItem(
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            fontSize = fontSize
         )
         Text(
             text = "${artist.songs.size} songs",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = fontSize * 0.8f
         )
     }
 }
@@ -2158,14 +2227,23 @@ fun ArtistGridItem(
 @Composable
 fun AlbumGridItem(
     album: AlbumInfo,
+    gridColumns: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    val imageSize = when(gridColumns) {
+        2 -> 140.dp
+        3 -> 100.dp
+        4 -> 80.dp
+        else -> 60.dp
+    }
+    val fontSize = if (gridColumns > 3) 12.sp else 14.sp
+
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(8.dp),
+            .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AsyncImage(
@@ -2175,7 +2253,7 @@ fun AlbumGridItem(
             error = rememberVectorPainter(AppIcons.Album),
             fallback = rememberVectorPainter(AppIcons.Album),
             modifier = Modifier
-                .size(120.dp)
+                .size(imageSize)
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentScale = ContentScale.Crop
@@ -2186,14 +2264,16 @@ fun AlbumGridItem(
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            fontSize = fontSize
         )
         Text(
             text = album.artist,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            fontSize = fontSize * 0.8f
         )
     }
 }
@@ -2347,6 +2427,8 @@ fun FixMetadataDialog(song: Song, viewModel: MusicViewModel, onDismiss: () -> Un
     var artist by remember { mutableStateOf(song.artist) }
     val searchResults by viewModel.searchResults.collectAsState()
     val isSearching by viewModel.isSearching
+    val isOnline by viewModel.isOnlineMode.collectAsState()
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2356,9 +2438,16 @@ fun FixMetadataDialog(song: Song, viewModel: MusicViewModel, onDismiss: () -> Un
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") })
                 OutlinedTextField(value = artist, onValueChange = { artist = it }, label = { Text("Artist") })
                 Button(
-                    onClick = { viewModel.searchMetadata(title, artist) },
+                    onClick = { 
+                        if (isOnline) {
+                            viewModel.searchMetadata(title, artist) 
+                        } else {
+                            android.widget.Toast.makeText(context, "Online Features disabled. Go to Settings to enable.", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth(),
-                    enabled = !isSearching
+                    enabled = !isSearching,
+                    colors = if (isOnline) ButtonDefaults.buttonColors() else ButtonDefaults.buttonColors(containerColor = Color.Gray)
                 ) {
                     if (isSearching) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                     else Text("Search Online")
@@ -2560,6 +2649,7 @@ fun FullPlayerView(
     val repeatMode by viewModel.repeatMode
     val shuffleMode by viewModel.shuffleMode
     val backImageUrl by viewModel.backImageUrl
+    val isOnline by viewModel.isOnlineMode.collectAsState()
     
     val context = LocalContext.current
 
@@ -2641,7 +2731,13 @@ fun FullPlayerView(
                                         cameraDistance = 12f * density
                                     }
                                     .combinedClickable(
-                                        onClick = { onShowArtistBio(song.artist) },
+                                        onClick = { 
+                                            if (isOnline) {
+                                                onShowArtistBio(song.artist) 
+                                            } else {
+                                                android.widget.Toast.makeText(context, "Online Features disabled. Go to Settings to enable.", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
                                         onLongClick = { if (backImageUrl != null) isFlipped = !isFlipped }
                                     )
                             ) {
@@ -3504,6 +3600,7 @@ fun SettingsView(viewModel: MusicViewModel) {
     val crossfadeDuration by viewModel.crossfadeDuration.collectAsState()
     val sleepTimerFinishSong by viewModel.sleepTimerFinishSong.collectAsState()
     val sleepTimerRemaining by viewModel.sleepTimerMillis
+    val gridColumns by viewModel.gridColumns.collectAsState()
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -3537,6 +3634,40 @@ fun SettingsView(viewModel: MusicViewModel) {
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {
+        Text("Appearance", style = MaterialTheme.typography.titleMedium, color = Color.Yellow)
+        Spacer(Modifier.height(8.dp))
+
+        var showGridMenu by remember { mutableStateOf(false) }
+        ListItem(
+            headlineContent = { Text("Grid Columns", color = Color.Yellow) },
+            supportingContent = { Text("Set how many items wide the Artists and Albums grids should be.", color = Color.Yellow.copy(alpha = 0.7f)) },
+            trailingContent = {
+                Box {
+                    TextButton(onClick = { showGridMenu = true }) {
+                        Text("$gridColumns Columns", color = Color.Yellow)
+                        Icon(Icons.Default.ArrowDropDown, null, tint = Color.Yellow)
+                    }
+                    DropdownMenu(
+                        expanded = showGridMenu,
+                        onDismissRequest = { showGridMenu = false }
+                    ) {
+                        listOf(2, 3, 4, 5).forEach { cols ->
+                            DropdownMenuItem(
+                                text = { Text("$cols Columns") },
+                                onClick = {
+                                    viewModel.setGridColumns(cols)
+                                    showGridMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Black.copy(alpha = 0.2f))
+        )
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color.Yellow.copy(alpha = 0.2f))
+
         Text("Audio", style = MaterialTheme.typography.titleMedium, color = Color.Yellow)
         Spacer(Modifier.height(8.dp))
 
@@ -3627,13 +3758,13 @@ fun SettingsView(viewModel: MusicViewModel) {
         Spacer(Modifier.height(8.dp))
 
         ListItem(
-            headlineContent = { Text("Offline Mode", color = Color.Yellow) },
-            supportingContent = { Text("Disable all internet-reliant features (metadata fetching, YouTube search, etc.)", color = Color.Yellow.copy(alpha = 0.7f)) },
+            headlineContent = { Text("Online Features", color = Color.Yellow) },
+            supportingContent = { Text("Enable internet-reliant features (metadata fetching, YouTube search, lyrics etc.)", color = Color.Yellow.copy(alpha = 0.7f)) },
             trailingContent = {
-                val isOffline by viewModel.isOfflineMode.collectAsState()
+                val isOnline by viewModel.isOnlineMode.collectAsState()
                 Switch(
-                    checked = isOffline,
-                    onCheckedChange = { viewModel.setOfflineMode(it) },
+                    checked = isOnline,
+                    onCheckedChange = { viewModel.setOnlineMode(it) },
                     colors = SwitchDefaults.colors(checkedThumbColor = Color.Yellow, checkedTrackColor = Color.Yellow.copy(alpha = 0.5f))
                 )
             },
@@ -3721,8 +3852,165 @@ fun SettingsView(viewModel: MusicViewModel) {
         ) {
             Text("Clear Metadata Cache")
         }
+
+        HorizontalDivider(Modifier.padding(vertical = 16.dp), color = Color.Yellow.copy(alpha = 0.2f))
+
+        Text("App Info", style = MaterialTheme.typography.titleMedium, color = Color.Yellow)
+        Spacer(Modifier.height(8.dp))
+
+        ListItem(
+            headlineContent = { Text("About Music Player", color = Color.Yellow) },
+            supportingContent = { Text("View credits, used libraries, and data sources.", color = Color.Yellow.copy(alpha = 0.7f)) },
+            leadingContent = { Icon(Icons.Default.Info, null, tint = Color.Yellow) },
+            modifier = Modifier.clickable { viewModel.setView(MusicViewModel.View.ABOUT) },
+            trailingContent = { Icon(AppIcons.ChevronRight, null, tint = Color.Yellow) },
+            colors = ListItemDefaults.colors(containerColor = Color.Black.copy(alpha = 0.2f))
+        )
         
         Spacer(Modifier.height(32.dp))
+    }
+}
+
+@Composable
+fun AboutView() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = AppIcons.MusicNote,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = Color.Yellow
+        )
+        Text(
+            text = "Music Player",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.Yellow
+        )
+        Text(
+            text = "Version 1.0.4",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.Yellow.copy(alpha = 0.7f)
+        )
+
+        Spacer(Modifier.height(32.dp))
+
+        Text(
+            text = "Data Sources",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color.Yellow,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(Modifier.height(8.dp))
+        AboutCard(
+            title = "MusicBrainz",
+            description = "The primary source for high-quality music metadata, artist details, and release information."
+        )
+        AboutCard(
+            title = "TheAudioDB",
+            description = "Used for artist biographies and extended discography data."
+        )
+        AboutCard(
+            title = "AcoustID",
+            description = "Audio fingerprinting service used to identify unknown local files."
+        )
+        AboutCard(
+            title = "iTunes Search API",
+            description = "Source for high-resolution album artwork and genre classifications."
+        )
+        AboutCard(
+            title = "LRCLib & Netease",
+            description = "Providers for synchronized and plain-text lyrics."
+        )
+        AboutCard(
+            title = "YouTube",
+            description = "Used for streaming previews and downloading missing tracks."
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            text = "Open Source Libraries",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color.Yellow,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(Modifier.height(8.dp))
+        AboutCard(
+            title = "NewPipe Extractor",
+            description = "Powerful library for extracting media information and streams from YouTube."
+        )
+        AboutCard(
+            title = "TagLib",
+            description = "Advanced library for reading and writing ID3 tags and other audio metadata."
+        )
+        AboutCard(
+            title = "Coil",
+            description = "Fast and lightweight image loading library for Android."
+        )
+        AboutCard(
+            title = "Media3 (ExoPlayer)",
+            description = "The industry standard for high-performance audio playback on Android."
+        )
+        AboutCard(
+            title = "Retrofit & OkHttp",
+            description = "The backbone for all networking and API communications."
+        )
+        AboutCard(
+            title = "Room Database",
+            description = "Robust local storage for your library's metadata cache and settings."
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        Text(
+            text = "Project",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color.Yellow,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(Modifier.height(8.dp))
+        val context = LocalContext.current
+        AboutCard(
+            title = "Source Code",
+            description = "https://github.com/steel101/music-player-",
+            onClick = {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/steel101/music-player-"))
+                context.startActivity(intent)
+            }
+        )
+
+        Spacer(Modifier.height(32.dp))
+        Text(
+            text = "Made with ❤️ by steel101",
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.Yellow.copy(alpha = 0.5f)
+        )
+    }
+}
+
+@Composable
+fun AboutCard(title: String, description: String, onClick: (() -> Unit)? = null) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = title, fontWeight = FontWeight.Bold, color = Color.Yellow)
+            Spacer(Modifier.height(4.dp))
+            Text(text = description, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+        }
     }
 }
 

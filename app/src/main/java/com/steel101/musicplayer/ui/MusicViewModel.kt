@@ -77,27 +77,34 @@ class MusicViewModel(
         lastFailedSong?.let { performTagWrite(it) }
     }
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
 
     private val sharedPrefs = context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
     
-    private val _isOfflineMode = MutableStateFlow(sharedPrefs.getBoolean("offline_mode", true))
-    val isOfflineMode: StateFlow<Boolean> = _isOfflineMode.asStateFlow()
+    private val _isOnlineMode = MutableStateFlow(sharedPrefs.getBoolean("online_mode", false))
+    val isOnlineMode: StateFlow<Boolean> = _isOnlineMode.asStateFlow()
 
-    private val _showOfflineOnboarding = MutableStateFlow(!sharedPrefs.contains("offline_mode"))
-    val showOfflineOnboarding: StateFlow<Boolean> = _showOfflineOnboarding.asStateFlow()
+    private val _showOnlineOnboarding = MutableStateFlow(!sharedPrefs.contains("online_mode"))
+    val showOnlineOnboarding: StateFlow<Boolean> = _showOnlineOnboarding.asStateFlow()
 
-    fun setOfflineMode(enabled: Boolean) {
-        _isOfflineMode.value = enabled
-        sharedPrefs.edit().putBoolean("offline_mode", enabled).apply()
-        _showOfflineOnboarding.value = false
+    fun setOnlineMode(enabled: Boolean) {
+        _isOnlineMode.value = enabled
+        sharedPrefs.edit().putBoolean("online_mode", enabled).apply()
+        _showOnlineOnboarding.value = false
+        if (enabled) {
+            loadSongs()
+            _currentSong.value?.let { fetchLyrics(it) }
+        }
     }
 
-    fun dismissOfflineOnboarding() {
-        _showOfflineOnboarding.value = false
-        if (!sharedPrefs.contains("offline_mode")) {
-            sharedPrefs.edit().putBoolean("offline_mode", true).apply()
+    fun dismissOnlineOnboarding() {
+        _showOnlineOnboarding.value = false
+        if (!sharedPrefs.contains("online_mode")) {
+            sharedPrefs.edit().putBoolean("online_mode", false).apply()
         }
     }
 
@@ -115,23 +122,25 @@ class MusicViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    private val _currentView = MutableStateFlow<View>(View.SONGS)
-    val currentView: StateFlow<View> = _currentView.asStateFlow()
+    data class SelectionState(
+        val view: View = View.SONGS,
+        val artist: String? = null,
+        val album: String? = null,
+        val playlist: PlaylistEntity? = null,
+        val genre: String? = null,
+        val decade: Int? = null,
+        val playlistPaths: List<String> = emptyList()
+    )
 
-    private val _selectedArtist = MutableStateFlow<String?>(null)
-    val selectedArtist: StateFlow<String?> = _selectedArtist.asStateFlow()
+    private val _selectionState = MutableStateFlow(SelectionState())
+    val selectionState: StateFlow<SelectionState> = _selectionState.asStateFlow()
 
-    private val _selectedAlbum = MutableStateFlow<String?>(null)
-    val selectedAlbum: StateFlow<String?> = _selectedAlbum.asStateFlow()
-
-    private val _selectedPlaylist = MutableStateFlow<PlaylistEntity?>(null)
-    val selectedPlaylist: StateFlow<PlaylistEntity?> = _selectedPlaylist.asStateFlow()
-
-    private val _selectedGenre = MutableStateFlow<String?>(null)
-    val selectedGenre: StateFlow<String?> = _selectedGenre.asStateFlow()
-
-    private val _selectedDecade = MutableStateFlow<Int?>(null)
-    val selectedDecade: StateFlow<Int?> = _selectedDecade.asStateFlow()
+    val currentView = _selectionState.map { it.view }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), View.SONGS)
+    val selectedArtist = _selectionState.map { it.artist }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val selectedAlbum = _selectionState.map { it.album }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val selectedPlaylist = _selectionState.map { it.playlist }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val selectedGenre = _selectionState.map { it.genre }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val selectedDecade = _selectionState.map { it.decade }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _sortOrder = MutableStateFlow(SortOrder.TITLE)
     val sortOrder: StateFlow<SortOrder> = _sortOrder.asStateFlow()
@@ -139,35 +148,6 @@ class MusicViewModel(
     fun setSortOrder(order: SortOrder) {
         _sortOrder.value = order
     }
-
-    private val _playlistSongs = MutableStateFlow<List<String>>(emptyList())
-
-    private val _selectionState = combine(
-        _selectedArtist, 
-        _selectedAlbum, 
-        _selectedPlaylist, 
-        _selectedGenre, 
-        _selectedDecade, 
-        _playlistSongs
-    ) { args ->
-        SelectionState(
-            args[0] as String?,
-            args[1] as String?,
-            args[2] as PlaylistEntity?,
-            args[3] as String?,
-            args[4] as Int?,
-            args[5] as List<String>
-        )
-    }
-
-    private data class SelectionState(
-        val artist: String?,
-        val album: String?,
-        val playlist: PlaylistEntity?,
-        val genre: String?,
-        val decade: Int?,
-        val playlistPaths: List<String>
-    )
 
     private fun fuzzyMatch(text: String, query: String): Boolean {
         if (text.contains(query, ignoreCase = true)) return true
@@ -208,19 +188,23 @@ class MusicViewModel(
         return dp[s2.length]
     }
 
-    val filteredSongs: StateFlow<List<Song>> = combine(_songs, _searchQuery, _currentView, _selectionState, _sortOrder) { songs, query, view, selection, order ->
+    val filteredSongs: StateFlow<List<Song>> = combine(_songs, _searchQuery, _selectionState, _sortOrder) { songs, query, selection, order ->
         val isPodcast = { song: Song -> song.duration > 600000 && !song.manualNotPodcast }
         
-        val baseList = when (view) {
+        val baseList = when (selection.view) {
             View.PODCASTS -> songs.filter { isPodcast(it) }
-            View.FAVORITES -> songs.filter { !isPodcast(it) && it.isFavorite }
+            View.FAVORITES -> songs.filter { it.isFavorite }
             View.RECENTLY_PLAYED -> songs.filter { !isPodcast(it) && it.lastPlayed > 0 }.sortedByDescending { it.lastPlayed }
             View.MOST_PLAYED -> songs.filter { !isPodcast(it) && it.playCount > 0 }.sortedByDescending { it.playCount }
             View.RECENTLY_ADDED -> songs.filter { !isPodcast(it) }.sortedByDescending { it.dateAdded }
             View.NEVER_PLAYED -> songs.filter { !isPodcast(it) && it.playCount == 0 }.sortedByDescending { it.dateAdded }
-            View.FORGOTTEN_FAVORITES -> songs.filter { !isPodcast(it) && it.isFavorite && (System.currentTimeMillis() - it.lastPlayed > 30L * 24 * 60 * 60 * 1000) }.sortedBy { it.lastPlayed }
-            View.ARTIST_DETAIL -> songs.filter { !isPodcast(it) && it.artist == selection.artist }
-            View.ALBUM_DETAIL -> songs.filter { !isPodcast(it) && it.album == selection.album }
+            View.FORGOTTEN_FAVORITES -> songs.filter { it.isFavorite && (System.currentTimeMillis() - it.lastPlayed > 30L * 24 * 60 * 60 * 1000) }.sortedBy { it.lastPlayed }
+            View.ARTIST_DETAIL -> songs.filter { !isPodcast(it) && MetadataCleaner.normalizeForComparison(it.artist) == MetadataCleaner.normalizeForComparison(selection.artist ?: "") }
+            View.ALBUM_DETAIL -> songs.filter { 
+                !isPodcast(it) && 
+                MetadataCleaner.normalizeForComparison(it.album) == MetadataCleaner.normalizeForComparison(selection.album ?: "") &&
+                (selection.artist == null || MetadataCleaner.normalizeForComparison(it.artist) == MetadataCleaner.normalizeForComparison(selection.artist ?: ""))
+            }
             View.GENRE_DETAIL -> songs.filter { !isPodcast(it) && (it.genre ?: "Unknown").equals(selection.genre, ignoreCase = true) }
             View.DECADE_DETAIL -> songs.filter { 
                 !isPodcast(it) && selection.decade != null && 
@@ -306,6 +290,14 @@ class MusicViewModel(
 
     private val _playbackPitch = MutableStateFlow(sharedPrefs.getFloat("playback_pitch", 1.0f))
     val playbackPitch: StateFlow<Float> = _playbackPitch.asStateFlow()
+
+    private val _gridColumns = MutableStateFlow(sharedPrefs.getInt("grid_columns", 2))
+    val gridColumns: StateFlow<Int> = _gridColumns.asStateFlow()
+
+    fun setGridColumns(columns: Int) {
+        _gridColumns.value = columns
+        sharedPrefs.edit().putInt("grid_columns", columns).apply()
+    }
 
     private val _excludedFolders = MutableStateFlow<List<String>>(emptyList())
     val excludedFolders: StateFlow<List<String>> = _excludedFolders.asStateFlow()
@@ -482,7 +474,7 @@ class MusicViewModel(
     }
 
     enum class SortOrder { TITLE, ARTIST, ALBUM, GENRE, DATE_ADDED, PLAY_COUNT }
-    enum class View { SONGS, ARTISTS, ALBUMS, ARTIST_DETAIL, ALBUM_DETAIL, FAVORITES, PLAYLISTS, PLAYLIST_DETAIL, RECENTLY_PLAYED, MOST_PLAYED, RECENTLY_ADDED, NEVER_PLAYED, EQUALIZER, SETTINGS, QUEUE, PODCASTS, GENRES, GENRE_DETAIL, FOLDERS, INSIGHTS, FORGOTTEN_FAVORITES, YT_SEARCH, DECADES, DECADE_DETAIL }
+    enum class View { SONGS, ARTISTS, ALBUMS, ARTIST_DETAIL, ALBUM_DETAIL, FAVORITES, PLAYLISTS, PLAYLIST_DETAIL, RECENTLY_PLAYED, MOST_PLAYED, RECENTLY_ADDED, NEVER_PLAYED, EQUALIZER, SETTINGS, QUEUE, PODCASTS, GENRES, GENRE_DETAIL, FOLDERS, INSIGHTS, FORGOTTEN_FAVORITES, YT_SEARCH, DECADES, DECADE_DETAIL, ABOUT }
     data class LyricLine(val timeMs: Long, val text: String)
 
     private val _artistBio = MutableStateFlow<String?>(null)
@@ -498,7 +490,7 @@ class MusicViewModel(
     val isFetchingMbTracks: State<Boolean> = _isFetchingMbTracks
 
     fun fetchAlbumTracksFromMusicBrainz(albumTitle: String, artistName: String) {
-        if (_isOfflineMode.value) return
+        if (!_isOnlineMode.value) return
         viewModelScope.launch {
             _isFetchingMbTracks.value = true
             _mbAlbumTracks.value = emptyList()
@@ -529,7 +521,7 @@ class MusicViewModel(
     val isSearchingYt: State<Boolean> = _isSearchingYt
 
     fun searchYoutube(query: String) {
-        if (query.isBlank() || _isOfflineMode.value) return
+        if (query.isBlank() || !_isOnlineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSearchingYt.value = true
             try {
@@ -609,20 +601,27 @@ class MusicViewModel(
     }
 
     fun fetchArtistInfo(artistName: String) {
-        if (artistName == "Unknown" || artistName == "<unknown>" || _isOfflineMode.value) return
+        val cleanName = artistName.trim()
+        if (cleanName == "Unknown" || cleanName == "<unknown>") return
         
         viewModelScope.launch {
+            if (!_isOnlineMode.value) return@launch
             _isFetchingArtistInfo.value = true
+            _artistBio.value = null
+            _artistDiscography.value = emptyList()
             try {
-                val response = audioDbService.searchArtist(artistName)
+                val response = audioDbService.searchArtist(cleanName)
                 val artist = response.artists?.firstOrNull()
                 if (artist != null) {
                     _artistBio.value = artist.biography
                     val albumsResponse = audioDbService.getAlbums(artist.id!!)
                     _artistDiscography.value = albumsResponse.albums?.sortedByDescending { it.year } ?: emptyList()
+                } else {
+                    _artistBio.value = "No biography found for this artist."
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Failed to fetch artist info", e)
+                _artistBio.value = "Failed to load biography. Please check your connection."
             } finally {
                 _isFetchingArtistInfo.value = false
             }
@@ -911,24 +910,20 @@ class MusicViewModel(
         viewModelScope.launch {
             repository.deletePlaylist(playlist)
             loadPlaylists()
-            if (_selectedPlaylist.value?.id == playlist.id) {
+            if (_selectionState.value.playlist?.id == playlist.id) {
                 setView(View.PLAYLISTS)
             }
         }
     }
 
     fun setView(view: View, artist: String? = null, album: String? = null, playlist: PlaylistEntity? = null, genre: String? = null, decade: Int? = null) {
-        _currentView.value = view
-        _selectedArtist.value = artist
-        _selectedAlbum.value = album
-        _selectedPlaylist.value = playlist
-        _selectedGenre.value = genre
-        _selectedDecade.value = decade
-        
-        if (view == View.PLAYLIST_DETAIL && playlist != null) {
-            viewModelScope.launch {
-                _playlistSongs.value = repository.getSongsInPlaylist(playlist.id)
+        viewModelScope.launch {
+            val paths = if (view == View.PLAYLIST_DETAIL && playlist != null) {
+                repository.getSongsInPlaylist(playlist.id)
+            } else {
+                emptyList()
             }
+            _selectionState.value = SelectionState(view, artist, album, playlist, genre, decade, paths)
         }
     }
 
@@ -1029,8 +1024,8 @@ class MusicViewModel(
     }
 
     private fun fetchLyrics(song: Song) {
-        if (_isOfflineMode.value) return
         viewModelScope.launch {
+            if (!_isOnlineMode.value) return@launch
             try {
                 val localFile = File(context.filesDir, "lyrics_${song.id}.lrc")
                 if (localFile.exists()) {
@@ -1041,12 +1036,23 @@ class MusicViewModel(
 
                 var lrcText: String? = null
                 var isSynced = false
+                val cleanAlbum = if (song.album == "Unknown" || song.album.contains(".mp3", ignoreCase = true)) null else song.album
+                
                 try {
-                    val response = lyricsService.getLyrics(song.title, song.artist, song.album, (song.duration / 1000).toInt())
+                    val response = lyricsService.getLyrics(
+                        song.title, 
+                        song.artist, 
+                        cleanAlbum, 
+                        (song.duration / 1000).toInt(),
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                    )
                     lrcText = response.syncedLyrics ?: response.plainLyrics
                     isSynced = response.syncedLyrics != null
                 } catch (e: Exception) {
-                    val searchResponse = lyricsService.searchLyrics("${song.artist} ${song.title}")
+                    val searchResponse = lyricsService.searchLyrics(
+                        "${song.artist} ${song.title}",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                    )
                     val match = searchResponse.firstOrNull { it.syncedLyrics != null || it.plainLyrics != null }
                     lrcText = match?.syncedLyrics ?: match?.plainLyrics
                     isSynced = match?.syncedLyrics != null
@@ -1140,32 +1146,37 @@ class MusicViewModel(
 
     fun loadSongs() {
         viewModelScope.launch {
-            val fetchedSongs = repository.getSongs()
-            _songs.value = fetchedSongs.filter { !it.isHidden }
-            
-            enrichmentJob?.cancel()
-            enrichmentJob = viewModelScope.launch {
-                if (_isAutoTagEnabled.value) {
+            _isRefreshing.value = true
+            try {
+                val fetchedSongs = repository.getSongs()
+                _songs.value = fetchedSongs.filter { !it.isHidden }
+                
+                enrichmentJob?.cancel()
+                enrichmentJob = viewModelScope.launch {
+                    if (_isAutoTagEnabled.value) {
+                        fetchedSongs.filter { song ->
+                            !song.hasEmbeddedArt && song.albumImageUrl != null
+                        }.forEach { song ->
+                            performTagWrite(song)
+                            delay(500)
+                        }
+                    }
+
                     fetchedSongs.filter { song ->
-                        !song.hasEmbeddedArt && song.albumImageUrl != null
+                        if (song.manualOverride) return@filter false
+                        val needsAlbumArt = !song.hasEmbeddedArt && song.albumImageUrl == null
+                        val needsArtistArt = song.artistImageUrl == null
+                        val needsYear = song.year == 0
+                        val needsGenre = song.genre == null
+                        val hasBasicInfo = song.artist != "Unknown" && song.artist != "Unknown Artist"
+                        (needsAlbumArt || needsArtistArt || needsYear || needsGenre) && hasBasicInfo
                     }.forEach { song ->
-                        performTagWrite(song)
-                        delay(500)
+                        enrichMetadata(song)
+                        delay(1100)
                     }
                 }
-
-                fetchedSongs.filter { song ->
-                    if (song.manualOverride) return@filter false
-                    val needsAlbumArt = !song.hasEmbeddedArt && song.albumImageUrl == null
-                    val needsArtistArt = song.artistImageUrl == null
-                    val needsYear = song.year == 0
-                    val needsGenre = song.genre == null
-                    val hasBasicInfo = song.artist != "Unknown" && song.artist != "Unknown Artist"
-                    (needsAlbumArt || needsArtistArt || needsYear || needsGenre) && hasBasicInfo
-                }.forEach { song ->
-                    enrichMetadata(song)
-                    delay(1100)
-                }
+            } finally {
+                _isRefreshing.value = false
             }
         }
     }
@@ -1188,7 +1199,7 @@ class MusicViewModel(
     }
 
     fun playPreview(title: String, artist: String) {
-        if (_isOfflineMode.value) return
+        if (!_isOnlineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val youtube = ServiceList.YouTube
@@ -1205,7 +1216,7 @@ class MusicViewModel(
     }
 
     fun playYoutubePreview(item: StreamInfoItem) {
-        if (_isOfflineMode.value) return
+        if (!_isOnlineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val youtube = ServiceList.YouTube
@@ -1259,7 +1270,7 @@ class MusicViewModel(
     }
 
     suspend fun enrichMetadata(song: Song, forcedAlbumArt: String? = null) {
-        if (_isOfflineMode.value && forcedAlbumArt == null) return
+        if (!_isOnlineMode.value && forcedAlbumArt == null) return
         try {
             val cleanTitle = MetadataCleaner.cleanString(song.title)
             val cleanArtist = MetadataCleaner.cleanString(song.artist)
@@ -1350,7 +1361,7 @@ class MusicViewModel(
 
                 if (artistImageUrl == null) {
                     try {
-                        val itunesResponse = itunesService.search(cleanArtist, entity = "album", limit = 1)
+                        val itunesResponse = itunesService.search(cleanArtist, entity = "musicTrack", limit = 1)
                         val result = itunesResponse.results?.firstOrNull()
                         if (result != null) {
                             artistImageUrl = result.artworkUrl100?.replace("100x100bb", "1000x1000bb")
@@ -1381,6 +1392,8 @@ class MusicViewModel(
                 )
                 repository.saveMetadata(updatedSong, isManual = forcedAlbumArt != null)
                 
+                _songs.value = _songs.value.map { if (it.id == song.id) updatedSong else it }
+
                 if (_isAutoTagEnabled.value || forcedAlbumArt != null) {
                     performTagWrite(updatedSong)
                 }
@@ -1423,7 +1436,7 @@ class MusicViewModel(
     val isSearching: State<Boolean> = _isSearching
 
     fun searchMetadata(title: String, artist: String) {
-        if (_isOfflineMode.value) return
+        if (!_isOnlineMode.value) return
         viewModelScope.launch {
             _isSearching.value = true
             try {
@@ -1509,7 +1522,7 @@ class MusicViewModel(
     fun applyManualMetadata(originalSong: Song, selectedMetadata: Song) {
         viewModelScope.launch {
             var artistImageUrl: String? = null
-            if (!_isOfflineMode.value) {
+            if (_isOnlineMode.value) {
                 try {
                     val response = audioDbService.searchArtist(selectedMetadata.artist)
                     val artist = response.artists?.firstOrNull { it.name?.lowercase() == selectedMetadata.artist.lowercase() }
@@ -1747,7 +1760,7 @@ class MusicViewModel(
     fun stop() { controller?.stop() }
 
     fun identifySong(song: Song) {
-        if (_isOfflineMode.value) return
+        if (!_isOnlineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
             try {
