@@ -24,8 +24,8 @@ android {
         applicationId = "com.steel101.musicplayer"
         minSdk = 34
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.0.7"
+        versionCode = 8
+        versionName = "1.0.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -68,10 +68,15 @@ android {
         buildConfig = true
     }
     packaging {
+        jniLibs {
+            useLegacyPackaging = false
+            keepDebugSymbols.add("**/libfpcalc.so")
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/versions/**"
             excludes += "/META-INF/*.kotlin_module"
+            excludes += "/META-INF/version-control-info.textproto"
             excludes += "/*.txt"
             excludes += "/com/google/thirdparty/**"
         }
