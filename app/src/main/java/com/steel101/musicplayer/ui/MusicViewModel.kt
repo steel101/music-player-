@@ -1694,21 +1694,42 @@ class MusicViewModel(
         val songList = fromList ?: _songs.value
         if (song.uri == Uri.EMPTY) return
         
-        val mediaItems = songList.map { it.toMediaItem() }
+        controller?.let { player ->
+            if (player.currentMediaItem?.mediaId == song.id.toString() && player.mediaItemCount == songList.size) {
+                if (!player.isPlaying) {
+                    player.play()
+                }
+                return
+            }
 
-        val startIndex = songList.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
-        controller?.setMediaItems(mediaItems, startIndex, 0L)
-        controller?.prepare()
-        controller?.play()
+            val mediaItems = songList.map { it.toMediaItem() }
+            val startIndex = songList.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+            
+            player.stop()
+            player.setMediaItems(mediaItems, startIndex, 0L)
+            player.prepare()
+            player.play()
+        }
     }
 
     fun playSongs(songs: List<Song>, startIndex: Int = 0, shuffle: Boolean = false) {
         if (songs.isEmpty()) return
-        val mediaItems = songs.map { it.toMediaItem() }
-        controller?.setMediaItems(mediaItems, if (shuffle) -1 else startIndex, 0L)
-        controller?.shuffleModeEnabled = shuffle
-        controller?.prepare()
-        controller?.play()
+        
+        controller?.let { player ->
+            val mediaItems = songs.map { it.toMediaItem() }
+            
+            val actualStartIndex = if (shuffle) {
+                (0 until mediaItems.size).random()
+            } else {
+                startIndex
+            }
+
+            player.stop()
+            player.shuffleModeEnabled = shuffle
+            player.setMediaItems(mediaItems, actualStartIndex, 0L)
+            player.prepare()
+            player.play()
+        }
     }
 
     fun playNext(song: Song) {
@@ -1785,16 +1806,30 @@ class MusicViewModel(
                     }
                 }
 
+                android.util.Log.d("MusicViewModel", "Fingerprint length: ${fingerprint?.length ?: 0}, Duration: $duration")
+
                 if (fingerprint != null && duration != null) {
+                    android.util.Log.d("MusicViewModel", "Sending AcoustID lookup...")
                     val response = acoustIdService.lookup(
+                        client = com.steel101.musicplayer.BuildConfig.ACOUSTID_KEY,
                         duration = duration!!,
                         fingerprint = fingerprint!!
                     )
                     
+                    android.util.Log.d("MusicViewModel", "AcoustID Response Status: ${response.status}")
+
+                    if (response.status != "ok") {
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(context, "AcoustID API Error: ${response.status}", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        return@launch
+                    }
+
                     val bestResult = response.results?.maxByOrNull { it.score }
                     val bestRecording = bestResult?.recordings?.firstOrNull()
 
                     if (bestRecording != null) {
+                        android.util.Log.d("MusicViewModel", "AcoustID found recording: ${bestRecording.id}, searching MusicBrainz...")
                         val mbResponse = musicBrainzService.searchRecording("rid:${bestRecording.id}")
                         val mbMatch = mbResponse.recordings?.firstOrNull()
 

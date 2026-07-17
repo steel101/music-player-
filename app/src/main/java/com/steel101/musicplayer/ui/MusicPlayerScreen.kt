@@ -3983,8 +3983,12 @@ fun AboutView() {
             title = "Source Code",
             description = "https://github.com/steel101/music-player-",
             onClick = {
-                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/steel101/music-player-"))
-                context.startActivity(intent)
+                try {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/steel101/music-player-"))
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "No browser found to open link.", android.widget.Toast.LENGTH_SHORT).show()
+                }
             }
         )
 
