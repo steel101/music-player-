@@ -6,6 +6,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
 android {
     dependenciesInfo {
         // Disables dependency metadata when       building APKs (for IzzyOnDroid/F-Droid)
@@ -64,11 +68,6 @@ android {
         buildConfig = true
     }
     packaging {
-        jniLibs {
-            useLegacyPackaging = false
-            keepDebugSymbols.add("**/libfpcalc.so")
-            keepDebugSymbols.add("**/libtaglib.so")
-        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/versions/**"
