@@ -60,7 +60,7 @@ This project is licensed under the **GNU General Public License v3.0**. See the 
 *   [Retrofit](https://github.com/square/retrofit) - Type-safe HTTP client.
 
 ## 🚀 Technical Highlights
-*   **Size Optimized:** Aggressively optimized to stay under **10MB** by stripping redundant libraries and native binaries.
+*   **Size Optimized:** Aggressively optimized to stay under **15MB** by stripping redundant libraries and native binaries.
 *   **Architecture:** Built using Modern Android Development (MAD) practices with Jetpack Compose, Kotlin Coroutines, and Room Database.
 *   **Media3/ExoPlayer:** Powered by Google's latest media engine for rock-solid stability and format support.
 
