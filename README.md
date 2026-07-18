@@ -1,3 +1,4 @@
+[<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroidButtonGreyBorder_nofont.png" height="80" alt="Get it at IzzyOnDroid">](https://apt.izzysoft.de/packages/<packageName>)
 # 🎵 Music Player
 
 A high-performance, feature-rich music player for Android designed for audiophiles and power users. This app combines a powerful offline playback engine with intelligent online metadata enrichment and YouTube integration—all packed into a highly optimized, lightweight APK.
