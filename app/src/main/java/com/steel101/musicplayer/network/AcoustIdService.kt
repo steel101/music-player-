@@ -9,7 +9,7 @@ interface AcoustIdService {
         @Query("client") client: String,
         @Query("duration") duration: Int,
         @Query("fingerprint") fingerprint: String,
-        @Query("meta") meta: String = "recordings releasegroups releases tracks compress",
+        @Query("meta") meta: String = "recordings releasegroups releases tracks compress recordingids",
         @Query("format") format: String = "json"
     ): AcoustIdResponse
 }

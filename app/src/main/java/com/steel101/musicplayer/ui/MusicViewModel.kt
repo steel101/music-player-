@@ -83,8 +83,157 @@ class MusicViewModel(
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
 
+    private val _selectedSongs = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedSongs: StateFlow<Set<Long>> = _selectedSongs.asStateFlow()
+
+    private val _isSelectionMode = MutableStateFlow(false)
+    val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
+
+    fun toggleSongSelection(songId: Long) {
+        val current = _selectedSongs.value.toMutableSet()
+        if (current.contains(songId)) {
+            current.remove(songId)
+        } else {
+            current.add(songId)
+        }
+        _selectedSongs.value = current
+        _isSelectionMode.value = current.isNotEmpty()
+    }
+
+    fun clearSelection() {
+        _selectedSongs.value = emptySet()
+        _isSelectionMode.value = false
+    }
+
+    fun batchSetGenre(genre: String) {
+        val ids = _selectedSongs.value
+        viewModelScope.launch {
+            _songs.value.filter { it.id in ids }.forEach { song ->
+                val updatedSong = song.copy(genre = genre, manualOverride = true)
+                repository.saveMetadata(updatedSong, isManual = true)
+                performTagWrite(updatedSong)
+            }
+            clearSelection()
+            loadSongs()
+        }
+    }
+
+    fun batchDelete() {
+        val ids = _selectedSongs.value
+        viewModelScope.launch {
+            _songs.value.filter { it.id in ids }.forEach { song ->
+                deleteSong(song)
+                delay(100)
+            }
+            clearSelection()
+        }
+    }
+
     private val sharedPrefs = context.getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
-    
+
+    private val _isAppTranslationEnabled = MutableStateFlow(sharedPrefs.getBoolean("app_translation_enabled", true))
+    val isAppTranslationEnabled: StateFlow<Boolean> = _isAppTranslationEnabled.asStateFlow()
+
+    private val _uiTranslations = MutableStateFlow<Map<String, String>>(emptyMap())
+    val uiTranslations: StateFlow<Map<String, String>> = _uiTranslations.asStateFlow()
+
+    fun setAppTranslationEnabled(enabled: Boolean) {
+        _isAppTranslationEnabled.value = enabled
+        sharedPrefs.edit().putBoolean("app_translation_enabled", enabled).apply()
+        if (enabled && _uiTranslations.value.isEmpty()) {
+            translateAppStrings()
+        }
+    }
+
+    fun translate(text: String): String {
+        return if (_isAppTranslationEnabled.value) {
+            _uiTranslations.value[text] ?: text
+        } else {
+            text
+        }
+    }
+
+    private fun translateAppStrings() {
+        if (!_isOnlineMode.value) return
+        
+        val stringsToTranslate = listOf(
+            "Songs", "Artists", "Albums", "Genres", "Folders", "Decades", "Podcasts", "Favorites", 
+            "Playlists", "Recently Played", "Most Played", "Recently Added", "Never Played", 
+            "Forgotten Favorites", "Top Played", "Insights", "YouTube Search", "Settings", "About", 
+            "All Songs", "Library", "Stats & History", "Library Insights", "Total Listening Time", 
+            "Top Artist", "Top Genre", "Total Plays", "Forgotten Gem", "Top 5 Songs", "Up Next", 
+            "Play Queue", "Appearance", "Grid Columns", "Audio", "Equalizer", "Silence Trimming", 
+            "Gapless Playback", "ReplayGain", "Sleep Timer", "Online Features", "Auto-write to disk", 
+            "Batch Fix Metadata (Auto)", "Playback", "Crossfade Duration", "Library Blacklist", 
+            "Cache", "Clear Metadata Cache", "App Info", "About Music Player", "Version", 
+            "Data Sources", "Open Source Libraries", "Project", "Source Code", 
+            "Made with ❤️ by steel101", "Play All", "Shuffle", "Create New Playlist", 
+            "New Playlist", "Playlist Name", "Create", "Cancel", "Delete", "Delete Song", 
+            "Are you sure you want to delete", "Delete Playlist", "Edit Artist Image", 
+            "Pick from Gallery", "OR", "Image URL", "Save URL", "Play Next", "Add to Queue", 
+            "Go to Artist", "Go to Album", "Fix Metadata / Artwork", "Identify Song (AcoustID)", 
+            "Set Artwork from Local / URL", "Set Genre", "Add to Playlist", "Delete from Device", 
+            "Edit Song Artwork", "Edit Album Artwork", "Search YouTube", "Search title, artist, album...", 
+            "Search Online", "Save Local", "Lyrics", "Edit Lyrics", "Share", "UP NEXT", "Time", 
+            "STAMP [TIME]", "Save", "None", "Small Room", "Medium Room", "Large Room", "Medium Hall", 
+            "Large Hall", "Plate", "Speed", "Pitch", "Reset Speed/Pitch", "Loudness Limiter", 
+            "Prevent audio clipping", "Reverb Preset", "Select Preset", "Frequency Bands", 
+            "Bass Boost", "Virtualizer", "Audio Enhancements", "Playback Control", "Master Effects",
+            "Enable Master Effects", "Equalizer Presets", "Select Preset", "Audio Enhancements",
+            "Playback Control", "Reset Speed/Pitch", "Loudness Limiter", "Prevent audio clipping",
+            "Reverb Preset", "None", "Small Room", "Medium Room", "Large Room", "Medium Hall",
+            "Large Hall", "Plate", "Speed", "Pitch", "Active", "remaining", "Stop", "5m", "15m", "30m", "60m",
+            "Finish current song", "Wait for the currently playing song to end before stopping.",
+            "Enable internet-reliant features", "Set how many items wide the Artists and Albums grids should be.",
+            "Adjust frequency bands, bass boost, and virtualizer.", "Automatically skip silence at the start and end of tracks.",
+            "Transition seamlessly between tracks.", "Normalize volume across tracks using metadata tags.",
+            "View credits, used libraries, and data sources.", "Songs in these folders will be hidden from your library.",
+            "Select Folder to Blacklist", "Clear Metadata Cache", "App UI Translation",
+            "Automatically translate the app interface into your language using Google Translate.",
+            "Stay Offline", "Enable Online Features", "Online Features",
+            "This app can connect to the internet to fetch album art, lyrics, artist bios, and identify songs. Would you like to enable these features or stay offline?",
+            "Biography", "Discography (Tap to see tracklist from MusicBrainz)", "Close", "Download from YouTube", "In Library", "Play Queue", "Artist", "Album", "Genre", "Playlist", "Library Insights", "Last played"
+        )
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val targetLang = java.util.Locale.getDefault().language
+                if (targetLang == "en") return@launch
+
+                val textToTranslate = stringsToTranslate.joinToString(" ||| ")
+                val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$targetLang&dt=t&q=${java.net.URLEncoder.encode(textToTranslate, "UTF-8")}"
+                
+                val request = okhttp3.Request.Builder().url(url).build()
+                val client = okhttp3.OkHttpClient()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@launch
+                    val body = response.body?.string() ?: return@launch
+                    
+                    val jsonArray = com.google.gson.JsonParser.parseString(body).asJsonArray
+                    val translations = jsonArray.get(0).asJsonArray
+                    val fullTranslatedText = StringBuilder()
+                    for (i in 0 until translations.size()) {
+                        fullTranslatedText.append(translations.get(i).asJsonArray.get(0).asString)
+                    }
+                    
+                    val translatedParts = fullTranslatedText.toString().split(" ||| ")
+                    
+                    withContext(Dispatchers.Main) {
+                        val newTranslations = mutableMapOf<String, String>()
+                        stringsToTranslate.forEachIndexed { index, original ->
+                            translatedParts.getOrNull(index)?.let { translated ->
+                                newTranslations[original] = translated.trim()
+                            }
+                        }
+                        _uiTranslations.value = newTranslations
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "App UI Translation failed", e)
+            }
+        }
+    }
+
     private val _isOnlineMode = MutableStateFlow(sharedPrefs.getBoolean("online_mode", false))
     val isOnlineMode: StateFlow<Boolean> = _isOnlineMode.asStateFlow()
 
@@ -98,6 +247,9 @@ class MusicViewModel(
         if (enabled) {
             loadSongs()
             _currentSong.value?.let { fetchLyrics(it) }
+            if (_isAppTranslationEnabled.value && _uiTranslations.value.isEmpty()) {
+                translateAppStrings()
+            }
         }
     }
 
@@ -210,7 +362,28 @@ class MusicViewModel(
                 !isPodcast(it) && selection.decade != null && 
                 (if (selection.decade > 0) (it.year >= selection.decade && it.year < selection.decade + 10) else it.year <= 0)
             }
-            View.PLAYLIST_DETAIL -> songs.filter { it.path in selection.playlistPaths }
+            View.PLAYLIST_DETAIL -> {
+                if (selection.playlist?.id ?: -1 < 0) {
+                    // Smart Playlist Logic
+                    when (selection.playlist?.name) {
+                        "On Repeat" -> {
+                            val twoWeeksAgo = System.currentTimeMillis() - (14L * 24 * 60 * 60 * 1000)
+                            songs.filter { it.lastPlayed > twoWeeksAgo }.sortedByDescending { it.playCount }.take(50)
+                        }
+                        "The Time Machine" -> {
+                            val sixMonthsAgo = System.currentTimeMillis() - (180L * 24 * 60 * 60 * 1000)
+                            songs.filter { it.lastPlayed < sixMonthsAgo && it.isFavorite }.shuffled().take(50)
+                        }
+                        "New Discoveries" -> {
+                            val sevenDaysAgo = System.currentTimeMillis() - (7L * 24 * 60 * 60 * 1000)
+                            songs.filter { it.dateAdded > sevenDaysAgo && it.playCount == 0 }.sortedByDescending { it.dateAdded }
+                        }
+                        else -> emptyList()
+                    }
+                } else {
+                    songs.filter { it.path in selection.playlistPaths }
+                }
+            }
             else -> songs.filter { !isPodcast(it) }
         }
 
@@ -475,7 +648,7 @@ class MusicViewModel(
 
     enum class SortOrder { TITLE, ARTIST, ALBUM, GENRE, DATE_ADDED, PLAY_COUNT }
     enum class View { SONGS, ARTISTS, ALBUMS, ARTIST_DETAIL, ALBUM_DETAIL, FAVORITES, PLAYLISTS, PLAYLIST_DETAIL, RECENTLY_PLAYED, MOST_PLAYED, RECENTLY_ADDED, NEVER_PLAYED, EQUALIZER, SETTINGS, QUEUE, PODCASTS, GENRES, GENRE_DETAIL, FOLDERS, INSIGHTS, FORGOTTEN_FAVORITES, YT_SEARCH, DECADES, DECADE_DETAIL, ABOUT }
-    data class LyricLine(val timeMs: Long, val text: String)
+    data class LyricLine(val timeMs: Long, val text: String, var translatedText: String? = null)
 
     private val _artistBio = MutableStateFlow<String?>(null)
     val artistBio: StateFlow<String?> = _artistBio.asStateFlow()
@@ -763,6 +936,7 @@ class MusicViewModel(
             setLimiterEnabled(_limiterEnabled.value)
             setSkipSilenceEnabled(_skipSilenceEnabled.value)
             setReverbPreset(_reverbPreset.value)
+            setReplayGainEnabled(_replayGainEnabled.value)
             setPlaybackSpeed(_playbackSpeed.value)
             setPlaybackPitch(_playbackPitch.value)
 
@@ -787,6 +961,9 @@ class MusicViewModel(
         loadSongs()
         loadPlaylists()
         loadExcludedFolders()
+        if (_isAppTranslationEnabled.value) {
+            translateAppStrings()
+        }
     }
 
     private fun updateTotalPlayTime() {
@@ -858,15 +1035,35 @@ class MusicViewModel(
         sleepTimerJob?.cancel()
         _sleepTimerMillis.longValue = minutes * 60 * 1000L
         sleepTimerJob = viewModelScope.launch {
+            var fadeStarted = false
+
             while (_sleepTimerMillis.longValue > 0) {
                 delay(1000)
                 _sleepTimerMillis.longValue -= 1000
-            }
-            if (_sleepTimerFinishSong.value) {
-                while (controller?.isPlaying == true) {
-                    delay(1000)
+
+                if (!_sleepTimerFinishSong.value && _sleepTimerMillis.longValue <= 30000 && !fadeStarted && controller?.isPlaying == true) {
+                    fadeStarted = true
+                    sendEqCommand("FADE_OUT", Bundle().apply { putInt("duration", 30000) })
                 }
             }
+
+            if (_sleepTimerFinishSong.value) {
+                val targetMediaId = controller?.currentMediaItem?.mediaId
+                if (targetMediaId != null) {
+                    while (controller?.currentMediaItem?.mediaId == targetMediaId && controller?.isPlaying == true) {
+                        val duration = controller?.duration ?: 0L
+                        val position = controller?.currentPosition ?: 0L
+                        val remaining = duration - position
+
+                        if (duration > 30000 && remaining < 20000 && !fadeStarted) {
+                            fadeStarted = true
+                            sendEqCommand("FADE_OUT", Bundle().apply { putInt("duration", 20000) })
+                        }
+                        delay(1000)
+                    }
+                }
+            }
+
             stop()
         }
     }
@@ -889,7 +1086,13 @@ class MusicViewModel(
 
     private fun loadPlaylists() {
         viewModelScope.launch {
-            _playlists.value = repository.getPlaylists()
+            val dbPlaylists = repository.getPlaylists()
+            val smartPlaylists = listOf(
+                PlaylistEntity(id = -1, name = "On Repeat"),
+                PlaylistEntity(id = -2, name = "The Time Machine"),
+                PlaylistEntity(id = -3, name = "New Discoveries")
+            )
+            _playlists.value = smartPlaylists + dbPlaylists
         }
     }
 
@@ -1025,15 +1228,30 @@ class MusicViewModel(
 
     private fun fetchLyrics(song: Song) {
         viewModelScope.launch {
-            if (!_isOnlineMode.value) return@launch
             try {
+                // 1. Check for manually synced local file
                 val localFile = File(context.filesDir, "lyrics_${song.id}.lrc")
                 if (localFile.exists()) {
                     val lrcText = localFile.readText()
                     _currentLyrics.value = parseLrc(lrcText)
+                    if (_isTranslationEnabled.value) {
+                        translateLyrics()
+                    }
                     return@launch
                 }
 
+                // 2. Check for embedded lyrics in the song object (already loaded from tags in Repository)
+                if (!song.lyrics.isNullOrBlank()) {
+                    _currentLyrics.value = parseLrc(song.lyrics)
+                    if (_isTranslationEnabled.value) {
+                        translateLyrics()
+                    }
+                    return@launch
+                }
+
+                if (!_isOnlineMode.value) return@launch
+
+                // 3. Online fetch
                 var lrcText: String? = null
                 var isSynced = false
                 val cleanAlbum = if (song.album == "Unknown" || song.album.contains(".mp3", ignoreCase = true)) null else song.album
@@ -1077,6 +1295,9 @@ class MusicViewModel(
                 
                 if (lrcText != null) {
                     _currentLyrics.value = parseLrc(lrcText)
+                    if (_isTranslationEnabled.value) {
+                        translateLyrics()
+                    }
                 }
             } catch (e: Exception) {
                 _currentLyrics.value = emptyList()
@@ -1089,8 +1310,17 @@ class MusicViewModel(
             try {
                 val localFile = File(context.filesDir, "lyrics_${song.id}.lrc")
                 localFile.writeText(lrcText)
+
+                val updatedSong = song.copy(lyrics = lrcText)
+                repository.saveMetadata(updatedSong, isManual = true)
+                performTagWrite(updatedSong)
+
                 withContext(Dispatchers.Main) {
                     _currentLyrics.value = parseLrc(lrcText)
+                    _songs.value = _songs.value.map { if (it.id == song.id) updatedSong else it }
+                    if (_currentSong.value?.id == song.id) {
+                        _currentSong.value = updatedSong
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Failed to save synced lyrics", e)
@@ -1189,6 +1419,65 @@ class MusicViewModel(
         }
     }
 
+    private val _isTranslationEnabled = MutableStateFlow(sharedPrefs.getBoolean("lyrics_translation", false))
+    val isTranslationEnabled: StateFlow<Boolean> = _isTranslationEnabled.asStateFlow()
+
+    fun setTranslationEnabled(enabled: Boolean) {
+        _isTranslationEnabled.value = enabled
+        sharedPrefs.edit().putBoolean("lyrics_translation", enabled).apply()
+        if (enabled && _currentLyrics.value.isNotEmpty() && _currentLyrics.value.all { it.translatedText == null }) {
+            translateLyrics()
+        }
+    }
+
+    private fun translateLyrics() {
+        val originalLyrics = _currentLyrics.value
+        if (originalLyrics.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val textToTranslate = originalLyrics.joinToString("\n") { it.text }
+                val targetLang = java.util.Locale.getDefault().language
+                
+                val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=$targetLang&dt=t&q=${java.net.URLEncoder.encode(textToTranslate, "UTF-8")}"
+                
+                val request = okhttp3.Request.Builder().url(url).build()
+                val client = okhttp3.OkHttpClient()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@launch
+                    val body = response.body?.string() ?: return@launch
+                    
+                    // Basic parsing for Google Translate GTX JSON format: [[["trans","orig",...],...],...]
+                    val jsonArray = com.google.gson.JsonParser.parseString(body).asJsonArray
+                    val translations = jsonArray.get(0).asJsonArray
+                    val fullTranslatedText = StringBuilder()
+                    for (i in 0 until translations.size()) {
+                        fullTranslatedText.append(translations.get(i).asJsonArray.get(0).asString)
+                    }
+                    
+                    val translatedLines = fullTranslatedText.toString().split("\n")
+                    
+                    withContext(Dispatchers.Main) {
+                        val updatedLyrics = originalLyrics.mapIndexed { index, line ->
+                            line.copy(translatedText = translatedLines.getOrNull(index))
+                        }
+                        _currentLyrics.value = updatedLyrics
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Translation failed", e)
+            }
+        }
+    }
+
+    private val _replayGainEnabled = MutableStateFlow(sharedPrefs.getBoolean("replay_gain_enabled", false))
+    val replayGainEnabled: StateFlow<Boolean> = _replayGainEnabled.asStateFlow()
+
+    fun setReplayGainEnabled(enabled: Boolean) {
+        _replayGainEnabled.value = enabled
+        sharedPrefs.edit().putBoolean("replay_gain_enabled", enabled).apply()
+        sendEqCommand("SET_REPLAYGAIN_ENABLED", Bundle().apply { putBoolean("enabled", enabled) })
+    }
     private val _gaplessPlaybackEnabled = MutableStateFlow(sharedPrefs.getBoolean("gapless_playback", true))
     val gaplessPlaybackEnabled: StateFlow<Boolean> = _gaplessPlaybackEnabled.asStateFlow()
 
@@ -1750,11 +2039,16 @@ class MusicViewModel(
             this.albumImageUrl?.let { Uri.parse(it) }
         }
 
+        val extras = Bundle().apply {
+            this@toMediaItem.trackGain?.let { putFloat("track_gain", it) }
+        }
+
         val metadata = MediaMetadata.Builder()
             .setTitle(this.title)
             .setArtist(this.artist)
             .setAlbumTitle(this.album)
             .setArtworkUri(albumArtUri)
+            .setExtras(extras)
             .build()
 
         return MediaItem.Builder()
@@ -1784,16 +2078,27 @@ class MusicViewModel(
         if (!_isOnlineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSearching.value = true
+            val originalFile = File(song.path)
+            val tempFile = File(context.cacheDir, "fp_${System.currentTimeMillis()}.${originalFile.extension.ifEmpty { "mp3" }}")
             try {
-                val path = song.path
-                if (path.isEmpty() || !File(path).exists()) {
+                if (song.path.isEmpty()) {
                     withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(context, "Audio file not found for fingerprinting", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(context, "Audio file path is empty", android.widget.Toast.LENGTH_SHORT).show()
                     }
                     return@launch
                 }
+
+                context.contentResolver.openInputStream(song.uri)?.use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                if (!tempFile.exists() || tempFile.length() == 0L) {
+                    throw Exception("Failed to prepare file for fingerprinting")
+                }
                 
-                val result = FpCalc.get(context).makeFingerprint(arrayOf("-length", "120", path))
+                val result = FpCalc.get(context).makeFingerprint(arrayOf("-length", "120", tempFile.absolutePath))
                 
                 var fingerprint: String? = null
                 var duration: Int? = null
@@ -1810,8 +2115,13 @@ class MusicViewModel(
 
                 if (fingerprint != null && duration != null) {
                     android.util.Log.d("MusicViewModel", "Sending AcoustID lookup...")
+                    val acoustIdKey = com.steel101.musicplayer.BuildConfig.ACOUSTID_KEY_DATA
+                        .split(",")
+                        .map { it.toInt().toChar() }
+                        .joinToString("")
+
                     val response = acoustIdService.lookup(
-                        client = com.steel101.musicplayer.BuildConfig.ACOUSTID_KEY,
+                        client = acoustIdKey,
                         duration = duration!!,
                         fingerprint = fingerprint!!
                     )
@@ -1829,9 +2139,24 @@ class MusicViewModel(
                     val bestRecording = bestResult?.recordings?.firstOrNull()
 
                     if (bestRecording != null) {
-                        android.util.Log.d("MusicViewModel", "AcoustID found recording: ${bestRecording.id}, searching MusicBrainz...")
-                        val mbResponse = musicBrainzService.searchRecording("rid:${bestRecording.id}")
+                        val mbid = bestRecording.mbids?.firstOrNull() ?: bestRecording.id
+                        android.util.Log.d("MusicViewModel", "AcoustID found recording, MBID: $mbid, searching MusicBrainz...")
+                        val mbResponse = musicBrainzService.searchRecording("rid:$mbid")
                         val mbMatch = mbResponse.recordings?.firstOrNull()
+
+                        var albumImageUrl: String? = song.albumImageUrl
+                        if (mbMatch != null) {
+                            val releaseMbid = mbMatch.releases?.firstOrNull()?.id
+                            if (releaseMbid != null) {
+                                albumImageUrl = "https://coverartarchive.org/release/$releaseMbid/front-500"
+                            }
+                        }
+                        
+                        // Fallback to iTunes if Cover Art Archive might fail or not exist
+                        if (albumImageUrl == null) {
+                            val itunesResponse = itunesService.search("${mbMatch?.artistCredit?.firstOrNull()?.artist?.name ?: bestRecording.artists?.firstOrNull()?.name} ${mbMatch?.releases?.firstOrNull()?.title ?: song.album}")
+                            albumImageUrl = itunesResponse.results?.firstOrNull()?.artworkUrl100?.replace("100x100", "600x600")
+                        }
 
                         val identified = song.copy(
                             title = mbMatch?.title ?: bestRecording.title ?: song.title,
@@ -1842,6 +2167,7 @@ class MusicViewModel(
                             artistMbid = mbMatch?.artistCredit?.firstOrNull()?.artist?.id 
                                          ?: bestRecording.artists?.firstOrNull()?.id,
                             albumMbid = mbMatch?.releases?.firstOrNull()?.id,
+                            albumImageUrl = albumImageUrl,
                             manualOverride = true
                         )
                         
@@ -1857,6 +2183,10 @@ class MusicViewModel(
                             android.widget.Toast.makeText(context, "Fingerprint not found in database", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(context, "Could not generate audio fingerprint", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Identify failed", e)
@@ -1864,6 +2194,7 @@ class MusicViewModel(
                     android.widget.Toast.makeText(context, "Error during fingerprinting", android.widget.Toast.LENGTH_SHORT).show()
                 }
             } finally {
+                if (tempFile.exists()) tempFile.delete()
                 _isSearching.value = false
             }
         }

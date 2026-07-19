@@ -13,7 +13,7 @@ import androidx.room.RoomDatabase
         SearchHistoryEntity::class,
         ExcludedFolderEntity::class
     ], 
-    version = 9
+    version = 11
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun metadataDao(): MetadataDao

@@ -28,5 +28,7 @@ data class Song(
     val lastPlayed: Long = 0,
     val totalPlayTimeMs: Long = 0,
     val dateAdded: Long = 0,
-    val manualNotPodcast: Boolean = false
+    val manualNotPodcast: Boolean = false,
+    val lyrics: String? = null,
+    val trackGain: Float? = null
 )

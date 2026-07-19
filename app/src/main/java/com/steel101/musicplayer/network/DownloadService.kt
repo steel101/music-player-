@@ -3,6 +3,7 @@ package com.steel101.musicplayer.network
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
@@ -76,7 +77,11 @@ class DownloadService : Service() {
         if (DownloadStatus.downloadingTracks.value.containsKey(trackKey)) return START_NOT_STICKY
 
         val initialNotification = createInitialNotification()
-        startForeground(NOTIFICATION_ID_BASE, initialNotification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID_BASE, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID_BASE, initialNotification)
+        }
 
         val job = serviceScope.launch {
             startDownload(trackTitle, artistName, trackKey)
@@ -296,7 +301,12 @@ class DownloadService : Service() {
             } else {
                 builder.setContentTitle("Downloading...")
             }
-            startForeground(NOTIFICATION_ID_BASE, builder.build())
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID_BASE, builder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID_BASE, builder.build())
+            }
         } else {
             val builder = NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(if (success) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)

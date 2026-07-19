@@ -22,7 +22,9 @@ data class MetadataEntity(
     val playCount: Int = 0,
     val lastPlayed: Long = 0,
     val totalPlayTimeMs: Long = 0,
-    val manualNotPodcast: Boolean = false
+    val manualNotPodcast: Boolean = false,
+    val lyrics: String? = null,
+    val trackGain: Float? = null
 )
 
 @Entity(tableName = "playlists")

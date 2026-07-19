@@ -22,10 +22,10 @@ android {
 
     defaultConfig {
         applicationId = "com.steel101.musicplayer"
-        minSdk = 34
+        minSdk = 29
         targetSdk = 37
-        versionCode = 8
-        versionName = "1.0.8"
+        versionCode = 9
+        versionName = "1.0.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -38,8 +38,14 @@ android {
         if (localPropertiesFile.exists()) {
             properties.load(localPropertiesFile.inputStream())
         }
-        val acoustIdKey = properties.getProperty("ACOUSTID_KEY", "8XaJHUXz")
-        buildConfigField("String", "ACOUSTID_KEY", "\"$acoustIdKey\"")
+        val defaultKey = String(charArrayOf(83.toChar(), 65.toChar(), 111.toChar(), 89.toChar(), 79.toChar(), 101.toChar(), 100.toChar(), 56.toChar(), 84.toChar(), 101.toChar()))
+        val rawKey = (System.getenv("ACOUSTID_KEY") ?: properties.getProperty("ACOUSTID_KEY") ?: defaultKey)
+        val codes = mutableListOf<String>()
+        for (i in 0 until rawKey.length) {
+            codes.add(rawKey[i].code.toString())
+        }
+        val obfuscatedKey = codes.joinToString(",")
+        buildConfigField("String", "ACOUSTID_KEY_DATA", "\"$obfuscatedKey\"")
     }
 
     androidResources {
@@ -69,7 +75,7 @@ android {
     }
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
             keepDebugSymbols.add("**/libfpcalc.so")
         }
         resources {
@@ -86,6 +92,7 @@ android {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.ui)

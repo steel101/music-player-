@@ -21,6 +21,10 @@ import android.media.audiofx.BassBoost
 import android.media.audiofx.Virtualizer
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.PresetReverb
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import androidx.media3.session.LibraryResult
@@ -29,6 +33,8 @@ import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.steel101.musicplayer.MusicApplication
+import com.steel101.musicplayer.data.Song
 
 class MusicService : MediaLibraryService() {
 
@@ -45,6 +51,8 @@ class MusicService : MediaLibraryService() {
     private var limiterEnabled = false
     private var skipSilenceEnabled = false
     private var reverbPreset: Int = 0
+    private var isReplayGainEnabled = false
+    private var currentTrackGain: Float = 0f
 
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
@@ -63,10 +71,6 @@ class MusicService : MediaLibraryService() {
         presetReverb?.release()
 
         try {
-            equalizer = Equalizer(0, audioSessionId)
-            bassBoost = BassBoost(0, audioSessionId)
-            virtualizer = Virtualizer(0, audioSessionId)
-            
             val limiter = DynamicsProcessing.Limiter(
                 true,
                 true,
@@ -121,13 +125,28 @@ class MusicService : MediaLibraryService() {
         presetReverb?.enabled = isEqEnabled
     }
 
+    private fun applyReplayGain() {
+        if (!isReplayGainEnabled || currentTrackGain == 0f) {
+            exoPlayer.volume = 1.0f
+            return
+        }
+        val factor = Math.pow(10.0, (currentTrackGain / 20.0)).toFloat().coerceIn(0.1f, 2.0f)
+        exoPlayer.volume = factor
+        Log.d("MusicService", "Applied ReplayGain: $currentTrackGain dB -> Volume Factor: $factor")
+    }
+
     private fun fadeVolume(targetVolume: Float, durationMs: Long) {
         volumeJob?.cancel()
         volumeJob = scope.launch {
+            val baseVolume = if (isReplayGainEnabled && currentTrackGain != 0f) {
+                Math.pow(10.0, (currentTrackGain / 20.0)).toFloat().coerceIn(0.1f, 2.0f)
+            } else 1.0f
+            
+            val adjustedTarget = targetVolume * baseVolume
             val startVolume = exoPlayer.volume
             val steps = 15
             val delayStep = durationMs / steps
-            val volumeStep = (targetVolume - startVolume) / steps
+            val volumeStep = (adjustedTarget - startVolume) / steps
             for (i in 1..steps) {
                 try {
                     exoPlayer.volume = startVolume + (volumeStep * i)
@@ -135,7 +154,7 @@ class MusicService : MediaLibraryService() {
                 delay(delayStep)
             }
             try {
-                exoPlayer.volume = targetVolume
+                exoPlayer.volume = adjustedTarget
             } catch (e: Exception) {}
         }
     }
@@ -186,6 +205,8 @@ class MusicService : MediaLibraryService() {
                 }
             }
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                currentTrackGain = mediaItem?.mediaMetadata?.extras?.getFloat("track_gain") ?: 0f
+                applyReplayGain()
                 fadeVolume(1.0f, 600)
             }
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
@@ -226,6 +247,7 @@ class MusicService : MediaLibraryService() {
                     .add(SessionCommand("SET_SKIP_SILENCE_ENABLED", Bundle.EMPTY))
                     .add(SessionCommand("SET_GAPLESS_ENABLED", Bundle.EMPTY))
                     .add(SessionCommand("SET_REVERB_PRESET", Bundle.EMPTY))
+                    .add(SessionCommand("SET_REPLAYGAIN_ENABLED", Bundle.EMPTY))
                     .add(SessionCommand("SET_PLAYBACK_SPEED", Bundle.EMPTY))
                     .add(SessionCommand("SET_PLAYBACK_PITCH", Bundle.EMPTY))
                     .add(SessionCommand("GET_AUDIO_SESSION_ID", Bundle.EMPTY))
@@ -247,6 +269,7 @@ class MusicService : MediaLibraryService() {
                         androidx.media3.common.MediaMetadata.Builder()
                             .setIsBrowsable(true)
                             .setIsPlayable(false)
+                            .setTitle("Music Library")
                             .build()
                     )
                     .build()
@@ -261,7 +284,48 @@ class MusicService : MediaLibraryService() {
                 pageSize: Int,
                 params: LibraryParams?
             ): ListenableFuture<LibraryResult<ImmutableList<androidx.media3.common.MediaItem>>> {
-                return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
+                val repository = (application as MusicApplication).repository
+                
+                return when (parentId) {
+                    "ROOT" -> {
+                        val rootChildren = ImmutableList.of(
+                            androidx.media3.common.MediaItem.Builder()
+                                .setMediaId("ALL_SONGS")
+                                .setMediaMetadata(
+                                    androidx.media3.common.MediaMetadata.Builder()
+                                        .setTitle("All Songs")
+                                        .setIsBrowsable(true)
+                                        .setIsPlayable(false)
+                                        .build()
+                                ).build()
+                        )
+                        Futures.immediateFuture(LibraryResult.ofItemList(rootChildren, params))
+                    }
+                    "ALL_SONGS" -> {
+                        val settableFuture = com.google.common.util.concurrent.SettableFuture.create<LibraryResult<ImmutableList<androidx.media3.common.MediaItem>>>()
+                        scope.launch {
+                            val songs = repository.getSongs()
+                            val items = songs.map { song ->
+                                androidx.media3.common.MediaItem.Builder()
+                                    .setMediaId(song.id.toString())
+                                    .setUri(song.uri)
+                                    .setMediaMetadata(
+                                        androidx.media3.common.MediaMetadata.Builder()
+                                            .setTitle(song.title)
+                                            .setArtist(song.artist)
+                                            .setAlbumTitle(song.album)
+                                            .setIsBrowsable(false)
+                                            .setIsPlayable(true)
+                                            .build()
+                                    )
+                                    .build()
+                            }
+                            settableFuture.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                        }
+                        settableFuture
+                    }
+                    else -> Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
+                }
             }
 
             override fun onCustomCommand(
@@ -320,6 +384,10 @@ class MusicService : MediaLibraryService() {
                             presetReverb?.setPreset(preset.toShort())
                         } catch (e: Exception) { Log.e("MusicService", "Error setting Reverb", e) }
                     }
+                    "SET_REPLAYGAIN_ENABLED" -> {
+                        isReplayGainEnabled = args.getBoolean("enabled")
+                        applyReplayGain()
+                    }
                     "SET_PLAYBACK_SPEED" -> {
                         val speed = args.getFloat("speed")
                         exoPlayer.setPlaybackSpeed(speed)
@@ -334,6 +402,14 @@ class MusicService : MediaLibraryService() {
                         }
                         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, resultBundle))
                     }
+                    "FADE_OUT" -> {
+                        val duration = args.getInt("duration")
+                        fadeVolume(0.0f, duration.toLong())
+                    }
+                    "FADE_IN" -> {
+                        val duration = args.getInt("duration")
+                        fadeVolume(1.0f, duration.toLong())
+                    }
                 }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
@@ -342,6 +418,45 @@ class MusicService : MediaLibraryService() {
         mediaSession = MediaLibrarySession.Builder(this, exoPlayer, libraryCallback)
             .setSessionActivity(sessionActivityPendingIntent)
             .build()
+        
+        setupVolumeMemory()
+    }
+
+    private var currentDeviceId: String? = null
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+            updateVolumeForCurrentDevice()
+        }
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+            updateVolumeForCurrentDevice()
+        }
+    }
+
+    private fun setupVolumeMemory() {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
+        updateVolumeForCurrentDevice()
+    }
+
+    private fun updateVolumeForCurrentDevice() {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val device = devices.firstOrNull { it.isSink }
+        val deviceId = device?.let { "${it.type}_${it.address}" } ?: "default"
+
+        if (deviceId != currentDeviceId) {
+            // Save old volume
+            currentDeviceId?.let { oldId ->
+                val sharedPrefs = getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
+                sharedPrefs.edit().putFloat("volume_$oldId", exoPlayer.volume).apply()
+            }
+            
+            // Restore new volume
+            currentDeviceId = deviceId
+            val sharedPrefs = getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
+            val savedVolume = sharedPrefs.getFloat("volume_$deviceId", 1.0f)
+            fadeVolume(savedVolume, 500)
+        }
     }
 
     private fun updateWidget() {
@@ -363,6 +478,8 @@ class MusicService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
         mediaSession?.run {
             player.release()
             release()

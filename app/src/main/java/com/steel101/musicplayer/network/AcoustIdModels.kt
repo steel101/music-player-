@@ -16,7 +16,8 @@ data class AcoustIdResult(
 data class AcoustIdRecording(
     @SerializedName("id") val id: String,
     @SerializedName("title") val title: String?,
-    @SerializedName("artists") val artists: List<AcoustIdArtist>?
+    @SerializedName("artists") val artists: List<AcoustIdArtist>?,
+    @SerializedName("recordingids") val mbids: List<String>? = null
 )
 
 data class AcoustIdArtist(

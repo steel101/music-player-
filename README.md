@@ -1,5 +1,4 @@
 
-
 # 🎵 Music Player
 
 A high-performance, feature-rich music player for Android designed for audiophiles and power users. This app combines a powerful offline playback engine with intelligent online metadata enrichment and YouTube integration—all packed into a highly optimized, lightweight APK.
@@ -11,11 +10,13 @@ A high-performance, feature-rich music player for Android designed for audiophil
 *   **Audio Enhancements:** Built-in Bass Boost, Virtualizer, and Reverb effects.
 *   **Pro Playback Engine:** Supports Gapless playback, Silence Trimming (skips dead air at ends), and a Loudness Limiter to prevent clipping.
 *   **Speed & Pitch:** Adjust playback speed (0.5x to 2.0x) and pitch in real-time.
+*   **Per-Device Volume Memory:** Automatically remembers and restores your volume levels for specific Bluetooth devices, headphones, and speakers.
 
 ### 📚 Intelligent Library Management
 *   **Smart Grouping:** Browse your collection by Artist, Album, Genre, Folder, or even **Decade**.
+*   **Smart Playlists:** Dynamic auto-generating playlists including "On Repeat", "The Time Machine" (forgotten favorites), and "New Discoveries".
 *   **Library Insights:** View your listening stats, including total time, top artists, and "Forgotten Gems" you haven't played in a while.
-*   **Dynamic Playlists:** Create and manage custom playlists.
+*   **Bulk Management:** Multi-select mode for batch editing genres or deleting multiple tracks at once.
 *   **Folder Blacklisting:** Hide specific folders (like ringtones or game audio) from your library.
 
 ### 🔍 Automated Metadata & Artwork
@@ -30,13 +31,14 @@ A high-performance, feature-rich music player for Android designed for audiophil
 *   **High-Quality Extraction:** Automatically finds the best audio streams and fetches high-res thumbnails.
 
 ### 🎨 Beautiful & Functional UI
-*   **Dynamic Theming:** The entire app UI adapts its colors to match the artwork of the currently playing song.
-*   **Synced Lyrics:** Full support for `.lrc` files. View scrolling, time-synced lyrics, or use the **built-in Lyrics Editor** to sync them yourself.
+*   **Adaptive Blur UI:** A dynamic "glass-morphism" player background that creates a custom immersive look based on the current album art.
+*   **Auto UI Translation:** Automatically translates the entire app interface into your device's native language using Google Translate (can be toggled in settings).
+*   **Synced Lyrics:** Full support for `.lrc` files and **Embedded Lyrics** inside audio tags. View scrolling, time-synced lyrics with optional real-time translation.
 *   **Real-time Visualizer:** A responsive, rainbow-spectrum visualizer that reacts to your music.
-*   **Shared Transitions:** Smooth, modern animations when moving between lists and the full player view.
 
 ### 🛠️ Extras
-*   **Sleep Timer:** Fall asleep to music with a timer that can optionally wait for the current song to finish.
+*   **Android Auto:** Full support for browsing and controlling your library from your car's head unit.
+*   **Sleep Timer:** Fall asleep to music with a timer that features a smooth **Fade to Silence** ramp-down in the final 30 seconds.
 *   **Home Screen Widget:** Control your music and see what's playing without opening the app.
 *   **File Renaming:** Automatically rename messy filenames into clean `Artist - Title.mp3` formats based on metadata.
 
@@ -75,7 +77,6 @@ This project is licensed under the **GNU General Public License v3.0**. See the 
 ### 📥 How to build
 To generate the smallest possible version of this app for your device:
 1. Open the project in Android Studio.
-2. (Optional) To use your own AcoustID API key, add `ACOUSTID_KEY=your_key_here` to your `local.properties` file.
-3. Select the `release` build variant.
-4. Run `./gradlew assembleRelease`.
-5. Your optimized APK will be in `app/build/outputs/apk/release/`.
+2. Select the `release` build variant.
+3. Run `./gradlew assembleRelease`.
+4. Your optimized APK will be in `app/build/outputs/apk/release/`.

@@ -116,6 +116,7 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
             propertyMap["ALBUM"] = arrayOf(song.album)
             if (song.year > 0) propertyMap["DATE"] = arrayOf(song.year.toString())
             song.genre?.let { propertyMap["GENRE"] = arrayOf(it) }
+            song.lyrics?.let { propertyMap["LYRICS"] = arrayOf(it) }
             song.artistMbid?.let { propertyMap["MUSICBRAINZ_ARTISTID"] = arrayOf(it) }
             song.albumMbid?.let { propertyMap["MUSICBRAINZ_ALBUMID"] = arrayOf(it) }
             
@@ -483,8 +484,30 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                             playCount = cached?.playCount ?: 0,
                             lastPlayed = cached?.lastPlayed ?: 0,
                             totalPlayTimeMs = cached?.totalPlayTimeMs ?: 0,
-                            manualNotPodcast = cached?.manualNotPodcast ?: false
+                            manualNotPodcast = cached?.manualNotPodcast ?: false,
+                            lyrics = cached?.lyrics,
+                            trackGain = cached?.trackGain
                         ))
+                    } catch (e: Exception) {}
+                }
+
+                var trackGain = cached?.trackGain
+                var lyrics = cached?.lyrics
+                if (trackGain == null || lyrics == null) {
+                    try {
+                        ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+                            val metadata = TagLib.getMetadata(pfd.dup().detachFd())
+                            if (trackGain == null) {
+                                val gainStr = metadata?.propertyMap?.get("REPLAYGAIN_TRACK_GAIN")?.firstOrNull()
+                                             ?: metadata?.propertyMap?.get("replaygain_track_gain")?.firstOrNull()
+                                trackGain = gainStr?.replace(" dB", "")?.toFloatOrNull()
+                            }
+                            if (lyrics == null) {
+                                lyrics = metadata?.propertyMap?.get("LYRICS")?.firstOrNull()
+                                         ?: metadata?.propertyMap?.get("UNSYNCEDLYRICS")?.firstOrNull()
+                                         ?: metadata?.propertyMap?.get("USLT")?.firstOrNull()
+                            }
+                        }
                     } catch (e: Exception) {}
                 }
 
@@ -513,7 +536,9 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                     lastPlayed = cached?.lastPlayed ?: 0,
                     totalPlayTimeMs = cached?.totalPlayTimeMs ?: 0,
                     dateAdded = dateAdded,
-                    manualNotPodcast = cached?.manualNotPodcast ?: false
+                    manualNotPodcast = cached?.manualNotPodcast ?: false,
+                    lyrics = lyrics,
+                    trackGain = trackGain
                 ))
             }
         }
@@ -544,7 +569,9 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                 playCount = song.playCount,
                 lastPlayed = song.lastPlayed,
                 totalPlayTimeMs = song.totalPlayTimeMs,
-                manualNotPodcast = song.manualNotPodcast
+                manualNotPodcast = song.manualNotPodcast,
+                lyrics = song.lyrics,
+                trackGain = song.trackGain
             ))
         }
     }

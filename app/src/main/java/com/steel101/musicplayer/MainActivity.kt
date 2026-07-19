@@ -22,7 +22,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.steel101.musicplayer.data.AppDatabase
 import com.steel101.musicplayer.data.MusicRepository
 import com.steel101.musicplayer.ui.MusicPlayerScreen
 import com.steel101.musicplayer.ui.MusicViewModel
@@ -68,8 +67,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         hideSystemBars()
 
-        val database = AppDatabase.getDatabase(this)
-        val repository = MusicRepository(this, database.metadataDao())
+        val repository = (application as MusicApplication).repository
         viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
