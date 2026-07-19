@@ -493,7 +493,9 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
 
                 var trackGain = cached?.trackGain
                 var lyrics = cached?.lyrics
-                if (trackGain == null || lyrics == null) {
+                var currentGenre = cached?.genre ?: genre
+                
+                if (trackGain == null || lyrics == null || currentGenre == null) {
                     try {
                         ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
                             val metadata = TagLib.getMetadata(pfd.dup().detachFd())
@@ -506,6 +508,10 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                                 lyrics = metadata?.propertyMap?.get("LYRICS")?.firstOrNull()
                                          ?: metadata?.propertyMap?.get("UNSYNCEDLYRICS")?.firstOrNull()
                                          ?: metadata?.propertyMap?.get("USLT")?.firstOrNull()
+                            }
+                            if (currentGenre == null) {
+                                currentGenre = metadata?.propertyMap?.get("GENRE")?.firstOrNull()
+                                              ?: metadata?.propertyMap?.get("genre")?.firstOrNull()
                             }
                         }
                     } catch (e: Exception) {}
@@ -527,7 +533,7 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                     albumMbid = cached?.albumMbid,
                     artistImageUrl = cached?.artistImageUrl,
                     albumImageUrl = cached?.albumImageUrl,
-                    genre = cached?.genre ?: genre,
+                    genre = currentGenre,
                     hasEmbeddedArt = hasEmbeddedArt,
                     isHidden = cached?.isHidden ?: false,
                     manualOverride = cached?.manualOverride ?: false,

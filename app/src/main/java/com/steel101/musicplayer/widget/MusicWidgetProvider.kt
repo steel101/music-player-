@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import android.graphics.Bitmap
 import com.steel101.musicplayer.MainActivity
 import com.steel101.musicplayer.R
 import com.steel101.musicplayer.player.MusicService
@@ -24,12 +25,20 @@ class MusicWidgetProvider : AppWidgetProvider() {
         const val ACTION_PREV = "com.steel101.musicplayer.PREV"
 
         fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int, 
-                           title: String? = null, artist: String? = null, isPlaying: Boolean = false) {
+                           title: String? = null, artist: String? = null, isPlaying: Boolean = false,
+                           albumArt: Bitmap? = null) {
             
             val views = RemoteViews(context.packageName, R.layout.music_widget)
             
             views.setTextViewText(R.id.widget_title, title ?: "Not Playing")
-            views.setTextViewText(R.id.widget_artist, artist ?: "")
+            views.setTextViewText(R.id.widget_artist, artist ?: "Select a song")
+            
+            if (albumArt != null) {
+                views.setImageViewBitmap(R.id.widget_album_art, albumArt)
+            } else {
+                views.setImageViewResource(R.id.widget_album_art, android.R.drawable.ic_menu_report_image)
+            }
+
             views.setImageViewResource(R.id.widget_play_pause, 
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
 

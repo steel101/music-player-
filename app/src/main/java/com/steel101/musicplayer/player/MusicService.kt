@@ -16,6 +16,13 @@ import androidx.media3.session.MediaLibraryService
 import com.steel101.musicplayer.widget.MusicWidgetProvider
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.media.audiofx.Equalizer
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Virtualizer
@@ -97,7 +104,9 @@ class MusicService : MediaLibraryService() {
             presetReverb = PresetReverb(100, audioSessionId)
             
             dynamicsProcessing = DynamicsProcessing(100, audioSessionId, config)
-            dynamicsProcessing?.setLimiterAllChannelsTo(limiter)
+            try {
+                dynamicsProcessing?.setLimiterAllChannelsTo(limiter)
+            } catch (e: Exception) { Log.e("MusicService", "Limiter config failed", e) }
             
             applyAllSettings()
             
@@ -137,6 +146,14 @@ class MusicService : MediaLibraryService() {
 
     private fun fadeVolume(targetVolume: Float, durationMs: Long) {
         volumeJob?.cancel()
+        if (durationMs <= 0) {
+            val baseVolume = if (isReplayGainEnabled && currentTrackGain != 0f) {
+                Math.pow(10.0, (currentTrackGain / 20.0)).toFloat().coerceIn(0.1f, 2.0f)
+            } else 1.0f
+            exoPlayer.volume = targetVolume * baseVolume
+            return
+        }
+        
         volumeJob = scope.launch {
             val baseVolume = if (isReplayGainEnabled && currentTrackGain != 0f) {
                 Math.pow(10.0, (currentTrackGain / 20.0)).toFloat().coerceIn(0.1f, 2.0f)
@@ -144,9 +161,10 @@ class MusicService : MediaLibraryService() {
             
             val adjustedTarget = targetVolume * baseVolume
             val startVolume = exoPlayer.volume
-            val steps = 15
+            val steps = 12
             val delayStep = durationMs / steps
             val volumeStep = (adjustedTarget - startVolume) / steps
+
             for (i in 1..steps) {
                 try {
                     exoPlayer.volume = startVolume + (volumeStep * i)
@@ -200,14 +218,17 @@ class MusicService : MediaLibraryService() {
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 updateWidget()
-                if (isPlaying) {
+                if (isPlaying && equalizer == null) {
                     initAudioEffects(exoPlayer.audioSessionId)
                 }
             }
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
                 currentTrackGain = mediaItem?.mediaMetadata?.extras?.getFloat("track_gain") ?: 0f
-                applyReplayGain()
-                fadeVolume(1.0f, 600)
+                if (exoPlayer.isPlaying) {
+                    fadeVolume(1.0f, 400)
+                } else {
+                    applyReplayGain()
+                }
             }
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 initAudioEffects(audioSessionId)
@@ -465,15 +486,35 @@ class MusicService : MediaLibraryService() {
         val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
         val currentMediaItem = exoPlayer.currentMediaItem
         
-        for (appWidgetId in appWidgetIds) {
-            MusicWidgetProvider.updateAppWidget(
-                context = this,
-                appWidgetManager = appWidgetManager,
-                appWidgetId = appWidgetId,
-                title = currentMediaItem?.mediaMetadata?.title?.toString(),
-                artist = currentMediaItem?.mediaMetadata?.artist?.toString(),
-                isPlaying = exoPlayer.isPlaying
-            )
+        scope.launch {
+            val artworkUri = currentMediaItem?.mediaMetadata?.artworkUri
+            val bitmap = if (artworkUri != null) {
+                try {
+                    val loader = ImageLoader(this@MusicService)
+                    val request = ImageRequest.Builder(this@MusicService)
+                        .data(artworkUri)
+                        .size(128, 128)
+                        .build()
+                    val result = loader.execute(request)
+                    if (result is SuccessResult) {
+                        (result.drawable as? BitmapDrawable)?.bitmap
+                    } else null
+                } catch (e: Exception) { null }
+            } else null
+
+            withContext(Dispatchers.Main) {
+                for (appWidgetId in appWidgetIds) {
+                    MusicWidgetProvider.updateAppWidget(
+                        context = this@MusicService,
+                        appWidgetManager = appWidgetManager,
+                        appWidgetId = appWidgetId,
+                        title = currentMediaItem?.mediaMetadata?.title?.toString(),
+                        artist = currentMediaItem?.mediaMetadata?.artist?.toString(),
+                        isPlaying = exoPlayer.isPlaying,
+                        albumArt = bitmap
+                    )
+                }
+            }
         }
     }
 

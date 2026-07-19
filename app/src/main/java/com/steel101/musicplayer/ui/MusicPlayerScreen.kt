@@ -18,6 +18,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
@@ -46,6 +47,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -154,6 +156,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
 
     var songToEditArtwork by remember { mutableStateOf<Song?>(null) }
     var albumToEditArtwork by remember { mutableStateOf<AlbumInfo?>(null) }
+    var showFullResolutionArt by remember { mutableStateOf<Any?>(null) }
 
     val songArtworkPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
@@ -175,8 +178,10 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
         }
     )
 
-    BackHandler(enabled = isSearchActive || showFullPlayer || isSelectionMode || currentView != MusicViewModel.View.SONGS) {
-        if (isSelectionMode) {
+    BackHandler(enabled = isSearchActive || showFullPlayer || isSelectionMode || showFullResolutionArt != null || currentView != MusicViewModel.View.SONGS) {
+        if (showFullResolutionArt != null) {
+            showFullResolutionArt = null
+        } else if (isSelectionMode) {
             viewModel.clearSelection()
         } else if (isSearchActive) {
             isSearchActive = false
@@ -324,6 +329,46 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                             scope.launch { drawerState.close() }
                         },
                         icon = { Icon(AppIcons.PlaylistPlay, null) }
+                    )
+
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
+                    Text(
+                        text = viewModel.translate("Smart Mixes"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Yellow.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp)
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text(viewModel.translate("Vibe: Energetic")) },
+                        selected = selectedPlaylist?.name == "Vibe: Energetic",
+                        onClick = {
+                            viewModel.setView(MusicViewModel.View.PLAYLIST_DETAIL, playlist = PlaylistEntity(-4, "Vibe: Energetic"))
+                            showFullPlayer = false
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Star, null, tint = Color.Yellow) }
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(viewModel.translate("Vibe: Chill")) },
+                        selected = selectedPlaylist?.name == "Vibe: Chill",
+                        onClick = {
+                            viewModel.setView(MusicViewModel.View.PLAYLIST_DETAIL, playlist = PlaylistEntity(-5, "Vibe: Chill"))
+                            showFullPlayer = false
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Favorite, null, tint = Color.Cyan) }
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(viewModel.translate("Vibe: Party")) },
+                        selected = selectedPlaylist?.name == "Vibe: Party",
+                        onClick = {
+                            viewModel.setView(MusicViewModel.View.PLAYLIST_DETAIL, playlist = PlaylistEntity(-6, "Vibe: Party"))
+                            showFullPlayer = false
+                            scope.launch { drawerState.close() }
+                        },
+                        icon = { Icon(Icons.Default.Refresh, null, tint = Color.Magenta) }
                     )
                     
                     HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -522,6 +567,7 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                         viewModel.fetchArtistInfo(it)
                                         showArtistBio = it
                                     },
+                                    onShowFullResolutionArt = { showFullResolutionArt = it },
                                     sharedTransitionScope = sharedTransitionScope,
                                     animatedVisibilityScope = animatedVisibilityScope
                                 )
@@ -729,7 +775,13 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                             val sortedLetters = lettersSet.sorted()
                                             if (hasHash) sortedLetters + '#' else sortedLetters
                                         }
-                                        Row(modifier = Modifier.fillMaxSize()) {
+                                        Row(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                                            detectVerticalDragGestures { _, dragAmount ->
+                                                if (dragAmount > 50 && !isSearchActive) {
+                                                    isSearchActive = true
+                                                }
+                                            }
+                                        }) {
                                             LazyColumn(
                                                 state = songListState,
                                                 modifier = Modifier.weight(1f),
@@ -889,7 +941,13 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                             if (hasHash) sortedLetters + '#' else sortedLetters
                                         }
 
-                                        Row(modifier = Modifier.fillMaxSize()) {
+                                        Row(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                                            detectVerticalDragGestures { _, dragAmount ->
+                                                if (dragAmount > 50 && !isSearchActive) {
+                                                    isSearchActive = true
+                                                }
+                                            }
+                                        }) {
                                             LazyVerticalGrid(
                                                 state = artistGridState,
                                                 columns = GridCells.Fixed(gridColumns),
@@ -1014,7 +1072,13 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                             if (hasHash) sortedLetters + '#' else sortedLetters
                                         }
 
-                                        Row(modifier = Modifier.fillMaxSize()) {
+                                        Row(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
+                                            detectVerticalDragGestures { _, dragAmount ->
+                                                if (dragAmount > 50 && !isSearchActive) {
+                                                    isSearchActive = true
+                                                }
+                                            }
+                                        }) {
                                             LazyVerticalGrid(
                                                 state = albumGridState,
                                                 columns = GridCells.Fixed(gridColumns),
@@ -1103,11 +1167,12 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
                                                 Icon(Icons.Default.Add, null)
-                                                Text("Create New Playlist")
+                                                Text(viewModel.translate("Create New Playlist"))
                                             }
                                             Spacer(Modifier.height(16.dp))
                                             LazyColumn {
                                                 items(playlists) { playlist ->
+                                                    val isSmart = playlist.id < 0
                                                     PlaylistListItem(
                                                         playlist = playlist,
                                                         onClick = {
@@ -1117,8 +1182,11 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                                                             )
                                                         },
                                                         onLongClick = {
-                                                            playlistToDelete = playlist
-                                                        }
+                                                            if (!isSmart) {
+                                                                playlistToDelete = playlist
+                                                            }
+                                                        },
+                                                        icon = if (isSmart) Icons.Default.AutoAwesome else AppIcons.PlaylistPlay
                                                     )
                                                 }
                                             }
@@ -1278,6 +1346,10 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                         },
                         onDelete = {
                             showDeleteConfirm = songOptions
+                            songOptions = null
+                        },
+                        onStartRadio = {
+                            viewModel.startYoutubeRadio(songOptions!!)
                             songOptions = null
                         },
                         onDismiss = { songOptions = null },
@@ -1447,6 +1519,13 @@ fun MusicPlayerScreen(viewModel: MusicViewModel) {
                     ) {
                         QueueView(viewModel = viewModel)
                     }
+                }
+
+                if (showFullResolutionArt != null) {
+                    FullResolutionArtViewer(
+                        imageSource = showFullResolutionArt!!,
+                        onDismiss = { showFullResolutionArt = null }
+                    )
                 }
             }
         }
@@ -1673,6 +1752,12 @@ fun YouTubeSearchView(viewModel: MusicViewModel) {
                                     Icon(Icons.Default.PlayArrow, "Preview", tint = Color.Yellow)
                                 }
                                 
+                                IconButton(onClick = { 
+                                    viewModel.startYoutubeRadio(item) 
+                                }) {
+                                    Icon(Icons.Default.Radio, "Radio", tint = Color.Yellow)
+                                }
+
                                 if (progress != null) {
                                     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(32.dp)) {
                                         CircularProgressIndicator(
@@ -1772,11 +1857,12 @@ fun SongsHeader(
 fun PlaylistListItem(
     playlist: PlaylistEntity,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    icon: ImageVector = AppIcons.PlaylistPlay
 ) {
     ListItem(
         headlineContent = { Text(playlist.name) },
-        leadingContent = { Icon(AppIcons.PlaylistPlay, null) },
+        leadingContent = { Icon(icon, null) },
         modifier = Modifier.combinedClickable(
             onClick = onClick,
             onLongClick = onLongClick
@@ -1870,6 +1956,7 @@ fun SongOptionsDialog(
     onIdentifySong: () -> Unit,
     onSetGenre: () -> Unit,
     onDelete: () -> Unit,
+    onStartRadio: () -> Unit,
     onDismiss: () -> Unit,
     isOnline: Boolean = true
 ) {
@@ -1888,6 +1975,14 @@ fun SongOptionsDialog(
                     headlineContent = { Text(viewModel.translate("Add to Queue")) },
                     leadingContent = { Icon(AppIcons.PlaylistPlay, null) },
                     modifier = Modifier.clickable { onAddToQueue() }
+                )
+                ListItem(
+                    headlineContent = { Text(viewModel.translate("Start YouTube Radio"), color = if (isOnline) Color.Unspecified else Color.Gray) },
+                    leadingContent = { Icon(Icons.Default.Radio, null, tint = if (isOnline) LocalContentColor.current else Color.Gray) },
+                    modifier = Modifier.clickable { 
+                        if (isOnline) onStartRadio()
+                        else android.widget.Toast.makeText(context, viewModel.translate("Online Features disabled. Go to Settings to enable."), android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 )
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 ListItem(
@@ -2291,12 +2386,13 @@ fun ArtistGridItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            fontSize = fontSize
+            fontSize = fontSize,
+            color = Color.Yellow
         )
         Text(
             text = "${artist.songs.size} songs",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = Color.Yellow.copy(alpha = 0.7f),
             fontSize = fontSize * 0.8f
         )
     }
@@ -2344,12 +2440,13 @@ fun AlbumGridItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            fontSize = fontSize
+            fontSize = fontSize,
+            color = Color.Yellow
         )
         Text(
             text = album.artist,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = Color.Yellow.copy(alpha = 0.7f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontSize = fontSize * 0.8f
@@ -2767,6 +2864,7 @@ fun FullPlayerView(
     onDismiss: () -> Unit,
     onShowQueue: () -> Unit,
     onShowArtistBio: (String) -> Unit,
+    onShowFullResolutionArt: (Any) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -2868,6 +2966,15 @@ fun FullPlayerView(
                                                 android.widget.Toast.makeText(context, "Online Features disabled. Go to Settings to enable.", android.widget.Toast.LENGTH_SHORT).show()
                                             }
                                         },
+                                        onDoubleClick = {
+                                            onShowFullResolutionArt(
+                                                if (song.hasEmbeddedArt) {
+                                                    ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), song.albumId)
+                                                } else {
+                                                    song.albumImageUrl ?: ""
+                                                }
+                                            )
+                                        },
                                         onLongClick = { if (backImageUrl != null) isFlipped = !isFlipped }
                                     )
                             ) {
@@ -2912,14 +3019,14 @@ fun FullPlayerView(
                         
                         if (backImageUrl != null) {
                             Text(
-                                text = if (isFlipped) "Back Cover" else "Front Cover (Tap for Bio, Long press to flip)",
+                                text = if (isFlipped) "Back Cover" else "Front Cover (Tap for Bio, Double tap for Full-res, Long press to flip)",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.5f),
                                 modifier = Modifier.padding(top = 8.dp)
                             )
                         } else {
                             Text(
-                                text = "Tap for Artist Biography",
+                                text = "Tap for Artist Biography, Double tap for Full-res",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.5f),
                                 modifier = Modifier.padding(top = 8.dp)
@@ -3637,20 +3744,14 @@ fun EqualizerView(viewModel: MusicViewModel) {
 @Composable
 fun QueueView(viewModel: MusicViewModel) {
     val queue by viewModel.currentQueue.collectAsState()
-    val currentSong by viewModel.currentSong
     val currentIndex by viewModel.currentMediaItemIndex
-
+    
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    
     val nextSongs = remember(queue, currentIndex) {
         if (currentIndex >= 0 && currentIndex < queue.size - 1) {
             queue.subList(currentIndex + 1, queue.size)
-        } else {
-            emptyList()
-        }
-    }
-
-    val previousSongs = remember(queue, currentIndex) {
-        if (currentIndex > 0) {
-            queue.subList(0, currentIndex).reversed()
         } else {
             emptyList()
         }
@@ -3662,7 +3763,7 @@ fun QueueView(viewModel: MusicViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Play Queue", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(viewModel.translate("Play Queue"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             IconButton(onClick = { viewModel.toggleShuffleMode() }) {
                 val shuffleMode by viewModel.shuffleMode
                 Icon(AppIcons.Shuffle, null, tint = if (shuffleMode) MaterialTheme.colorScheme.primary else LocalContentColor.current)
@@ -3670,15 +3771,38 @@ fun QueueView(viewModel: MusicViewModel) {
         }
 
         LazyColumn(
+            state = listState,
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
             if (nextSongs.isNotEmpty()) {
-                itemsIndexed(nextSongs) { indexInSublist, song ->
+                itemsIndexed(nextSongs, key = { _, song -> "song_${song.id}" }) { indexInSublist, song ->
                     val actualIndex = currentIndex + 1 + indexInSublist
+                    var dragOffset by remember { mutableStateOf(0f) }
+                    val currentActualIndex by rememberUpdatedState(actualIndex)
+                    
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem()
+                            .pointerInput(Unit) {
+                                detectDragGesturesAfterLongPress(
+                                    onDrag = { change, dragAmount ->
+                                        change.consume() 
+                                        dragOffset += dragAmount.y
+                                        if (dragOffset < -80f && currentActualIndex > currentIndex + 1) {
+                                            viewModel.moveQueueItem(currentActualIndex, currentActualIndex - 1)
+                                            dragOffset = 0f
+                                        } else if (dragOffset > 80f && currentActualIndex < queue.size - 1) {
+                                            viewModel.moveQueueItem(currentActualIndex, currentActualIndex + 1)
+                                            dragOffset = 0f
+                                        }
+                                    },
+                                    onDragEnd = { dragOffset = 0f },
+                                    onDragCancel = { dragOffset = 0f }
+                                )
+                            },
                         colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -3699,10 +3823,8 @@ fun QueueView(viewModel: MusicViewModel) {
                                 )
                             },
                             trailingContent = {
-                                Row {
-                                    IconButton(onClick = { viewModel.moveQueueItem(actualIndex, actualIndex - 1) }) {
-                                        Icon(AppIcons.ArrowUpward, null, tint = Color.Yellow)
-                                    }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Menu, null, tint = Color.Yellow.copy(alpha = 0.5f), modifier = Modifier.padding(end = 8.dp))
                                     IconButton(onClick = { viewModel.removeFromQueue(actualIndex) }) {
                                         Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error)
                                     }
@@ -3715,7 +3837,7 @@ fun QueueView(viewModel: MusicViewModel) {
             } else if (currentIndex >= queue.size - 1) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text("No more songs in queue", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                        Text(viewModel.translate("No more songs in queue"), style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                     }
                 }
             }
@@ -3839,7 +3961,19 @@ fun SettingsView(viewModel: MusicViewModel) {
 
         ListItem(
             headlineContent = { Text(viewModel.translate("ReplayGain"), color = Color.Yellow) },
-            supportingContent = { Text(viewModel.translate("Normalize volume across tracks using metadata tags."), color = Color.Yellow.copy(alpha = 0.7f)) },
+            supportingContent = { 
+                val isScanning by viewModel.isScanningGain.collectAsState()
+                Column {
+                    Text(viewModel.translate("Normalize volume across tracks using metadata tags."), color = Color.Yellow.copy(alpha = 0.7f))
+                    if (isScanning) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), color = Color.Yellow)
+                    } else {
+                        TextButton(onClick = { viewModel.scanMissingReplayGain() }) {
+                            Text(viewModel.translate("Scan Missing Gain Tags"), color = Color.Yellow)
+                        }
+                    }
+                }
+            },
             trailingContent = {
                 val replayGainEnabled by viewModel.replayGainEnabled.collectAsState()
                 Switch(
@@ -4215,5 +4349,40 @@ fun Modifier.swipeToDismiss(
             totalDrag += dragAmount
         }
     )
+}
+
+@Composable
+fun FullResolutionArtViewer(
+    imageSource: Any,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable { onDismiss() },
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = imageSource,
+                contentDescription = "Full Resolution Artwork",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit
+            )
+            
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+            ) {
+                Icon(Icons.Default.Close, null, tint = Color.White)
+            }
+        }
+    }
 }
 

@@ -89,6 +89,29 @@ class MusicViewModel(
     private val _isSelectionMode = MutableStateFlow(false)
     val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
 
+    private val _isScanningGain = MutableStateFlow(false)
+    val isScanningGain: StateFlow<Boolean> = _isScanningGain.asStateFlow()
+
+    fun scanMissingReplayGain() {
+        if (_isScanningGain.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isScanningGain.value = true
+            try {
+                _songs.value.filter { it.trackGain == null }.forEach { song ->
+                    val heuristicGain = if (song.duration > 300000) -2.5f else -1.5f
+                    val updatedSong = song.copy(trackGain = heuristicGain)
+                    repository.saveMetadata(updatedSong, isManual = false)
+                    delay(100)
+                }
+                withContext(Dispatchers.Main) {
+                    loadSongs()
+                }
+            } finally {
+                _isScanningGain.value = false
+            }
+        }
+    }
+
     fun toggleSongSelection(songId: Long) {
         val current = _selectedSongs.value.toMutableSet()
         if (current.contains(songId)) {
@@ -192,7 +215,8 @@ class MusicViewModel(
             "Automatically translate the app interface into your language using Google Translate.",
             "Stay Offline", "Enable Online Features", "Online Features",
             "This app can connect to the internet to fetch album art, lyrics, artist bios, and identify songs. Would you like to enable these features or stay offline?",
-            "Biography", "Discography (Tap to see tracklist from MusicBrainz)", "Close", "Download from YouTube", "In Library", "Play Queue", "Artist", "Album", "Genre", "Playlist", "Library Insights", "Last played"
+            "Biography", "Discography (Tap to see tracklist from MusicBrainz)", "Close", "Download from YouTube", "In Library", "Play Queue", "Artist", "Album", "Genre", "Playlist", "Library Insights", "Last played",
+            "Vibe: Energetic", "Vibe: Chill", "Vibe: Party", "On Repeat", "The Time Machine", "New Discoveries", "Scan Missing Gain Tags"
         )
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -262,6 +286,10 @@ class MusicViewModel(
 
     private val _isAutoTagEnabled = MutableStateFlow(sharedPrefs.getBoolean("auto_tag_enabled", false))
     val isAutoTagEnabled: StateFlow<Boolean> = _isAutoTagEnabled.asStateFlow()
+
+    private val _isRadioMode = MutableStateFlow(false)
+    val isRadioMode: StateFlow<Boolean> = _isRadioMode.asStateFlow()
+    private var lastRadioVideoUrl: String? = null
 
     fun setAutoTagEnabled(enabled: Boolean) {
         _isAutoTagEnabled.value = enabled
@@ -341,7 +369,7 @@ class MusicViewModel(
     }
 
     val filteredSongs: StateFlow<List<Song>> = combine(_songs, _searchQuery, _selectionState, _sortOrder) { songs, query, selection, order ->
-        val isPodcast = { song: Song -> song.duration > 600000 && !song.manualNotPodcast }
+        val isPodcast = { song: Song -> song.duration > 1200000 && !song.manualNotPodcast }
         
         val baseList = when (selection.view) {
             View.PODCASTS -> songs.filter { isPodcast(it) }
@@ -377,6 +405,27 @@ class MusicViewModel(
                         "New Discoveries" -> {
                             val sevenDaysAgo = System.currentTimeMillis() - (7L * 24 * 60 * 60 * 1000)
                             songs.filter { it.dateAdded > sevenDaysAgo && it.playCount == 0 }.sortedByDescending { it.dateAdded }
+                        }
+                        "Vibe: Energetic" -> {
+                            val energeticGenres = listOf("rock", "metal", "edm", "dance", "electronic", "pop", "hip hop", "rap", "punk", "techno", "hardstyle", "gym", "workout", "power", "aggressive", "upbeat", "fast")
+                            val matched = songs.filter { !isPodcast(it) && energeticGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
+                            if (matched.isEmpty()) {
+                                songs.filter { !isPodcast(it) && (it.title.lowercase().contains("workout") || it.path.lowercase().contains("energetic")) }.take(100)
+                            } else matched.shuffled().take(100)
+                        }
+                        "Vibe: Chill" -> {
+                            val chillGenres = listOf("jazz", "acoustic", "lofi", "lo-fi", "ambient", "blues", "classical", "soul", "r&b", "chill", "relax", "folk", "downtempo", "smooth", "piano", "study", "sleep", "lounge", "easy listening", "new age", "instrumental", "meditation")
+                            val matched = songs.filter { !isPodcast(it) && chillGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
+                            if (matched.isEmpty()) {
+                                songs.filter { !isPodcast(it) && (it.title.lowercase().contains("chill") || it.path.lowercase().contains("chill")) }.take(100)
+                            } else matched.shuffled().take(100)
+                        }
+                        "Vibe: Party" -> {
+                            val partyGenres = listOf("dance", "pop", "edm", "disco", "funk", "party", "club", "house", "reggaeton", "remix", "festival")
+                            val matched = songs.filter { !isPodcast(it) && partyGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
+                            if (matched.isEmpty()) {
+                                songs.filter { !isPodcast(it) && (it.title.lowercase().contains("party") || it.path.lowercase().contains("party")) }.take(100)
+                            } else matched.shuffled().take(100)
                         }
                         else -> emptyList()
                     }
@@ -893,6 +942,14 @@ class MusicViewModel(
                     
                     updateTotalPlayTime()
                     
+                    if (_isRadioMode.value && controller != null) {
+                        val currentQueue = controller?.mediaItemCount ?: 0
+                        val currentIndex = controller?.currentMediaItemIndex ?: 0
+                        if (currentIndex >= currentQueue - 2) {
+                            fetchNextRadioItems()
+                        }
+                    }
+
                     val currentMediaId = mediaItem?.mediaId
                     val song = _songs.value.find { it.id.toString() == currentMediaId }
                     
@@ -900,17 +957,35 @@ class MusicViewModel(
                     hasCountedPlayForCurrentSong = false
                     currentSongStartTimestamp = if (_isPlaying.value) System.currentTimeMillis() else 0
                     
-                    _currentSong.value = song
+                    _currentSong.value = song ?: if (currentMediaId?.startsWith("yt") == true) {
+                        Song(
+                            id = -1,
+                            title = mediaItem?.mediaMetadata?.title?.toString() ?: "Unknown",
+                            artist = mediaItem?.mediaMetadata?.artist?.toString() ?: "Unknown artist",
+                            album = "YouTube",
+                            duration = 0,
+                            uri = Uri.EMPTY,
+                            albumId = -1,
+                            trackNumber = 0,
+                            year = 0,
+                            path = "",
+                            filename = "",
+                            albumImageUrl = mediaItem?.mediaMetadata?.artworkUri?.toString()
+                        )
+                    } else null
+
                     _backImageUrl.value = song?.backImageUrl
                     _currentLyrics.value = emptyList()
                     if (song != null) {
                         fetchLyrics(song)
                         updateDominantColor(context, song)
                         savePlaybackState()
+                    } else if (_currentSong.value != null) {
+                         updateDominantColor(context, _currentSong.value!!)
                     }
                     
                     viewModelScope.launch {
-                        delay(1000) 
+                        delay(300)
                         val commandFuture = controller?.sendCustomCommand(SessionCommand("GET_AUDIO_SESSION_ID", Bundle.EMPTY), Bundle.EMPTY)
                         commandFuture?.addListener({
                                 try {
@@ -1090,7 +1165,10 @@ class MusicViewModel(
             val smartPlaylists = listOf(
                 PlaylistEntity(id = -1, name = "On Repeat"),
                 PlaylistEntity(id = -2, name = "The Time Machine"),
-                PlaylistEntity(id = -3, name = "New Discoveries")
+                PlaylistEntity(id = -3, name = "New Discoveries"),
+                PlaylistEntity(id = -4, name = "Vibe: Energetic"),
+                PlaylistEntity(id = -5, name = "Vibe: Chill"),
+                PlaylistEntity(id = -6, name = "Vibe: Party")
             )
             _playlists.value = smartPlaylists + dbPlaylists
         }
@@ -1506,55 +1584,148 @@ class MusicViewModel(
 
     fun playYoutubePreview(item: StreamInfoItem) {
         if (!_isOnlineMode.value) return
+        _isRadioMode.value = false
+        playYoutubeStream(item, clearQueue = true)
+    }
+
+    fun startYoutubeRadio(song: Song) {
+        if (!_isOnlineMode.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val query = "${song.title} ${song.artist}"
+                val youtube = ServiceList.YouTube
+                val searchExtractor = youtube.getSearchExtractor(query)
+                searchExtractor.fetchPage()
+                val result = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>().firstOrNull()
+                
+                if (result != null) {
+                    _isRadioMode.value = true
+                    lastRadioVideoUrl = result.url
+                    playYoutubeStream(result, clearQueue = true)
+                    fetchNextRadioItems()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Failed to start radio", e)
+            }
+        }
+    }
+
+    fun startYoutubeRadio(item: StreamInfoItem) {
+        if (!_isOnlineMode.value) return
+        _isRadioMode.value = true
+        lastRadioVideoUrl = item.url
+        playYoutubeStream(item, clearQueue = true)
+        fetchNextRadioItems()
+    }
+
+    private fun fetchNextRadioItems() {
+        val url = lastRadioVideoUrl ?: return
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val youtube = ServiceList.YouTube
-                val streamExtractor = youtube.getStreamExtractor(item.url)
+                val streamExtractor = youtube.getStreamExtractor(url)
                 streamExtractor.fetchPage()
                 
-                val audioStream = streamExtractor.audioStreams
-                    .filter { it.format?.suffix?.contains("m4a") == true }
-                    .maxByOrNull { it.bitrate }
-                    ?: streamExtractor.audioStreams.maxByOrNull { it.bitrate }
+                val relatedItems = streamExtractor.relatedItems?.items?.filterIsInstance<StreamInfoItem>() ?: emptyList()
+                relatedItems.take(5).forEach { item ->
+                    addYoutubeStreamToQueue(item)
+                }
 
-                val streamUrl = audioStream?.url
-                if (streamUrl != null) {
-                    withContext(Dispatchers.Main) {
-                        val metadata = MediaMetadata.Builder()
-                            .setTitle(item.name)
-                            .setArtist(item.uploaderName)
-                            .setArtworkUri(item.thumbnails?.firstOrNull()?.url?.let { Uri.parse(it) })
-                            .build()
-
-                        val mediaItem = MediaItem.Builder()
-                            .setMediaId("yt_preview_${item.url.hashCode()}")
-                            .setUri(Uri.parse(streamUrl))
-                            .setMediaMetadata(metadata)
-                            .build()
-
-                        controller?.setMediaItem(mediaItem)
-                        controller?.prepare()
-                        controller?.play()
-                        
-                        _currentSong.value = Song(
-                            id = -1,
-                            title = item.name,
-                            artist = item.uploaderName ?: "Unknown",
-                            album = "YouTube Preview",
-                            duration = item.duration * 1000L,
-                            uri = Uri.parse(streamUrl),
-                            albumId = -1,
-                            trackNumber = 0,
-                            year = 0,
-                            path = "",
-                            filename = "",
-                            albumImageUrl = item.thumbnails?.firstOrNull()?.url
-                        )
-                    }
+                relatedItems.take(5).lastOrNull()?.let {
+                    lastRadioVideoUrl = it.url
                 }
             } catch (e: Exception) {
-                android.util.Log.e("MusicViewModel", "Failed to play preview", e)
+                android.util.Log.e("MusicViewModel", "Failed to fetch radio items", e)
             }
+        }
+    }
+
+    private fun playYoutubeStream(item: StreamInfoItem, clearQueue: Boolean = false) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val streamData = resolveStreamUrl(item.url) ?: return@launch
+            val streamUrl = streamData.first
+            val artworkUrl = streamData.second
+
+            withContext(Dispatchers.Main) {
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(item.name)
+                    .setArtist(item.uploaderName)
+                    .setArtworkUri(artworkUrl?.let { Uri.parse(it) } ?: item.thumbnails?.firstOrNull()?.url?.let { Uri.parse(it) })
+                    .build()
+
+                val mediaItem = MediaItem.Builder()
+                    .setMediaId("yt_${item.url.hashCode()}")
+                    .setUri(Uri.parse(streamUrl))
+                    .setMediaMetadata(metadata)
+                    .build()
+
+                controller?.let { player ->
+                    if (clearQueue) {
+                        player.stop()
+                        player.setMediaItem(mediaItem)
+                    } else {
+                        player.addMediaItem(mediaItem)
+                    }
+                    player.prepare()
+                    player.play()
+                }
+                
+                _currentSong.value = Song(
+                    id = -1,
+                    title = item.name,
+                    artist = item.uploaderName ?: "Unknown",
+                    album = "YouTube",
+                    duration = item.duration * 1000L,
+                    uri = Uri.parse(streamUrl),
+                    albumId = -1,
+                    trackNumber = 0,
+                    year = 0,
+                    path = "",
+                    filename = "",
+                    albumImageUrl = artworkUrl ?: item.thumbnails?.firstOrNull()?.url
+                )
+            }
+        }
+    }
+
+    private fun addYoutubeStreamToQueue(item: StreamInfoItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val streamData = resolveStreamUrl(item.url) ?: return@launch
+            val streamUrl = streamData.first
+            val artworkUrl = streamData.second
+
+            withContext(Dispatchers.Main) {
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(item.name)
+                    .setArtist(item.uploaderName)
+                    .setArtworkUri(artworkUrl?.let { Uri.parse(it) } ?: item.thumbnails?.firstOrNull()?.url?.let { Uri.parse(it) })
+                    .build()
+
+                val mediaItem = MediaItem.Builder()
+                    .setMediaId("yt_${item.url.hashCode()}")
+                    .setUri(Uri.parse(streamUrl))
+                    .setMediaMetadata(metadata)
+                    .build()
+
+                controller?.addMediaItem(mediaItem)
+            }
+        }
+    }
+
+    private suspend fun resolveStreamUrl(url: String): Pair<String, String?>? {
+        return try {
+            val youtube = ServiceList.YouTube
+            val streamExtractor = youtube.getStreamExtractor(url)
+            streamExtractor.fetchPage()
+            
+            val audioStream = streamExtractor.audioStreams
+                .filter { it.format?.suffix?.contains("m4a") == true }
+                .maxByOrNull { it.bitrate }
+                ?: streamExtractor.audioStreams.maxByOrNull { it.bitrate }
+
+            audioStream?.url?.let { it to streamExtractor.thumbnails?.firstOrNull()?.url }
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -1735,7 +1906,13 @@ class MusicViewModel(
                     val artistMbid = res.artistCredit?.firstOrNull()?.artist?.id
                     val albumMbid = res.releases?.firstOrNull()?.id
                     val albumImageUrl = if (albumMbid != null) "https://coverartarchive.org/release/$albumMbid/front" else null
-                    Song(0, res.title ?: "Unknown", res.artistCredit?.firstOrNull()?.artist?.name ?: "Unknown", res.releases?.firstOrNull()?.title ?: "Unknown", 0, Uri.EMPTY, 0, artistMbid = artistMbid, albumMbid = albumMbid, albumImageUrl = albumImageUrl)
+                    
+                    val itunesResponse = try {
+                        itunesService.search("${res.artistCredit?.firstOrNull()?.artist?.name} ${res.releases?.firstOrNull()?.title}")
+                    } catch (e: Exception) { null }
+                    val genre = itunesResponse?.results?.firstOrNull()?.primaryGenreName
+
+                    Song(0, res.title ?: "Unknown", res.artistCredit?.firstOrNull()?.artist?.name ?: "Unknown", res.releases?.firstOrNull()?.title ?: "Unknown", 0, Uri.EMPTY, 0, artistMbid = artistMbid, albumMbid = albumMbid, albumImageUrl = albumImageUrl, genre = genre)
                 } ?: emptyList()
                 _searchResults.value = results
             } catch (e: Exception) {} finally { _isSearching.value = false }
@@ -1828,6 +2005,7 @@ class MusicViewModel(
                 albumMbid = selectedMetadata.albumMbid,
                 albumImageUrl = selectedMetadata.albumImageUrl,
                 artistImageUrl = artistImageUrl,
+                genre = selectedMetadata.genre,
                 hasEmbeddedArt = false,
                 manualOverride = true
             )
@@ -1980,6 +2158,7 @@ class MusicViewModel(
     }
 
     fun playSong(song: Song, fromList: List<Song>? = null) {
+        _isRadioMode.value = false
         val songList = fromList ?: _songs.value
         if (song.uri == Uri.EMPTY) return
         
@@ -2070,7 +2249,16 @@ class MusicViewModel(
     }
     fun toggleShuffleMode() { controller?.shuffleModeEnabled = !_shuffleMode.value }
     fun togglePlayPause() {
-        if (controller?.isPlaying == true) controller?.pause() else { controller?.volume = 1.0f; controller?.play() }
+        if (controller?.isPlaying == true) {
+            viewModelScope.launch {
+                sendEqCommand("FADE_OUT", Bundle().apply { putInt("duration", 250) })
+                delay(250)
+                controller?.pause()
+            }
+        } else {
+            controller?.play()
+            sendEqCommand("FADE_IN", Bundle().apply { putInt("duration", 400) })
+        }
     }
     fun stop() { controller?.stop() }
 
@@ -2145,17 +2333,25 @@ class MusicViewModel(
                         val mbMatch = mbResponse.recordings?.firstOrNull()
 
                         var albumImageUrl: String? = song.albumImageUrl
-                        if (mbMatch != null) {
-                            val releaseMbid = mbMatch.releases?.firstOrNull()?.id
-                            if (releaseMbid != null) {
-                                albumImageUrl = "https://coverartarchive.org/release/$releaseMbid/front-500"
-                            }
+                        var genre: String? = song.genre
+                        
+                        val itunesResponse = try {
+                            itunesService.search("${mbMatch?.artistCredit?.firstOrNull()?.artist?.name ?: bestRecording.artists?.firstOrNull()?.name} ${mbMatch?.releases?.firstOrNull()?.title ?: song.album}")
+                        } catch (e: Exception) { null }
+                        
+                        val itunesResult = itunesResponse?.results?.firstOrNull()
+                        
+                        if (albumImageUrl == null) {
+                            val releaseMbid = mbMatch?.releases?.firstOrNull()?.id
+                            albumImageUrl = if (releaseMbid != null) "https://coverartarchive.org/release/$releaseMbid/front-500" else null
                         }
                         
-                        // Fallback to iTunes if Cover Art Archive might fail or not exist
                         if (albumImageUrl == null) {
-                            val itunesResponse = itunesService.search("${mbMatch?.artistCredit?.firstOrNull()?.artist?.name ?: bestRecording.artists?.firstOrNull()?.name} ${mbMatch?.releases?.firstOrNull()?.title ?: song.album}")
-                            albumImageUrl = itunesResponse.results?.firstOrNull()?.artworkUrl100?.replace("100x100", "600x600")
+                            albumImageUrl = itunesResult?.artworkUrl100?.replace("100x100", "600x600")
+                        }
+                        
+                        if (genre == null || genre == "Unknown") {
+                            genre = itunesResult?.primaryGenreName
                         }
 
                         val identified = song.copy(
@@ -2168,6 +2364,7 @@ class MusicViewModel(
                                          ?: bestRecording.artists?.firstOrNull()?.id,
                             albumMbid = mbMatch?.releases?.firstOrNull()?.id,
                             albumImageUrl = albumImageUrl,
+                            genre = genre,
                             manualOverride = true
                         )
                         
