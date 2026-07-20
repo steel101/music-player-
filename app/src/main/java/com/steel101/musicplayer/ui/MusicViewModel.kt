@@ -19,6 +19,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.C
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.session.SessionCommand
@@ -40,8 +41,10 @@ import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -739,6 +742,8 @@ class MusicViewModel(
     private val _ytSearchResults = MutableStateFlow<List<StreamInfoItem>>(emptyList())
     val ytSearchResults: StateFlow<List<StreamInfoItem>> = _ytSearchResults.asStateFlow()
 
+    private val fingerprintSemaphore = Semaphore(1)
+
     private val _isSearchingYt = mutableStateOf(false)
     val isSearchingYt: State<Boolean> = _isSearchingYt
 
@@ -963,8 +968,8 @@ class MusicViewModel(
                             title = mediaItem?.mediaMetadata?.title?.toString() ?: "Unknown",
                             artist = mediaItem?.mediaMetadata?.artist?.toString() ?: "Unknown artist",
                             album = "YouTube",
-                            duration = 0,
-                            uri = Uri.EMPTY,
+                            duration = mediaItem?.mediaMetadata?.extras?.getLong("duration") ?: 0L,
+                            uri = mediaItem?.localConfiguration?.uri ?: Uri.EMPTY,
                             albumId = -1,
                             trackNumber = 0,
                             year = 0,
@@ -1215,6 +1220,14 @@ class MusicViewModel(
             while (true) {
                 val pos = controller?.currentPosition ?: 0L
                 _playbackPosition.longValue = pos
+
+                val current = _currentSong.value
+                if (current != null && current.id == -1L && current.duration <= 0L) {
+                    val playerDuration = controller?.duration ?: 0L
+                    if (playerDuration > 0 && playerDuration != C.TIME_UNSET) {
+                        _currentSong.value = current.copy(duration = playerDuration)
+                    }
+                }
                 
                 _currentSong.value?.let { checkPlayCount(it, pos) }
                 
@@ -1647,10 +1660,14 @@ class MusicViewModel(
             val artworkUrl = streamData.second
 
             withContext(Dispatchers.Main) {
+                val extras = Bundle().apply {
+                    putLong("duration", item.duration * 1000L)
+                }
                 val metadata = MediaMetadata.Builder()
                     .setTitle(item.name)
                     .setArtist(item.uploaderName)
                     .setArtworkUri(artworkUrl?.let { Uri.parse(it) } ?: item.thumbnails?.firstOrNull()?.url?.let { Uri.parse(it) })
+                    .setExtras(extras)
                     .build()
 
                 val mediaItem = MediaItem.Builder()
@@ -1695,10 +1712,14 @@ class MusicViewModel(
             val artworkUrl = streamData.second
 
             withContext(Dispatchers.Main) {
+                val extras = Bundle().apply {
+                    putLong("duration", item.duration * 1000L)
+                }
                 val metadata = MediaMetadata.Builder()
                     .setTitle(item.name)
                     .setArtist(item.uploaderName)
                     .setArtworkUri(artworkUrl?.let { Uri.parse(it) } ?: item.thumbnails?.firstOrNull()?.url?.let { Uri.parse(it) })
+                    .setExtras(extras)
                     .build()
 
                 val mediaItem = MediaItem.Builder()
@@ -2286,7 +2307,9 @@ class MusicViewModel(
                     throw Exception("Failed to prepare file for fingerprinting")
                 }
                 
-                val result = FpCalc.get(context).makeFingerprint(arrayOf("-length", "120", tempFile.absolutePath))
+                val result = fingerprintSemaphore.withPermit {
+                    FpCalc.get(context).makeFingerprint(arrayOf("-length", "120", tempFile.absolutePath))
+                }
                 
                 var fingerprint: String? = null
                 var duration: Int? = null
