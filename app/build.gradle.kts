@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         applicationId = "com.steel101.musicplayer"
-        minSdk = 29
+        minSdk = 31
         targetSdk = 37
         versionCode = 11
         versionName = "1.0.11"
