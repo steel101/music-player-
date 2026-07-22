@@ -30,5 +30,12 @@ data class Song(
     val dateAdded: Long = 0,
     val manualNotPodcast: Boolean = false,
     val lyrics: String? = null,
-    val trackGain: Float? = null
+    val trackGain: Float? = null,
+    val bpm: Int? = null,
+    val musicalKey: String? = null,
+    val isVideo: Boolean = false,
+    val composer: String? = null,
+    val discNumber: Int = 0,
+    val albumArtist: String? = null,
+    val comment: String? = null
 )

@@ -11,9 +11,10 @@ import androidx.room.RoomDatabase
         PlaylistEntity::class,
         PlaylistSongEntity::class,
         SearchHistoryEntity::class,
-        ExcludedFolderEntity::class
+        ExcludedFolderEntity::class,
+        SmartPlaylistEntity::class
     ], 
-    version = 11
+    version = 14
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun metadataDao(): MetadataDao

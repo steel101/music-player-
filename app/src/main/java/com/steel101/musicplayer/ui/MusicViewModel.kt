@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import androidx.annotation.OptIn
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -20,6 +21,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.session.SessionCommand
@@ -28,6 +30,7 @@ import com.steel101.musicplayer.data.MetadataCleaner
 import com.steel101.musicplayer.data.MusicRepository
 import com.steel101.musicplayer.data.Song
 import com.steel101.musicplayer.data.PlaylistEntity
+import com.steel101.musicplayer.data.SmartPlaylistEntity
 import com.steel101.musicplayer.network.AudioDbService
 import com.steel101.musicplayer.network.ItunesService
 import com.steel101.musicplayer.network.LyricsService
@@ -47,11 +50,14 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.StreamingService
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
+import org.schabi.newpipe.extractor.stream.StreamType
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.File
 
+@OptIn(UnstableApi::class)
 class MusicViewModel(
     private val repository: MusicRepository,
     private val context: Context
@@ -77,7 +83,9 @@ class MusicViewModel(
     }
 
     fun retryLastTagWrite() {
-        lastFailedSong?.let { performTagWrite(it) }
+        viewModelScope.launch {
+            lastFailedSong?.let { performTagWrite(it) }
+        }
     }
 
     private val _isRefreshing = MutableStateFlow(false)
@@ -185,7 +193,7 @@ class MusicViewModel(
         val stringsToTranslate = listOf(
             "Songs", "Artists", "Albums", "Genres", "Folders", "Decades", "Podcasts", "Favorites", 
             "Playlists", "Recently Played", "Most Played", "Recently Added", "Never Played", 
-            "Forgotten Favorites", "Top Played", "Insights", "YouTube Search", "Settings", "About", 
+            "Forgotten Favorites", "Top Played", "Insights", "YouTube Search", "Discover", "Settings", "About",
             "All Songs", "Library", "Stats & History", "Library Insights", "Total Listening Time", 
             "Top Artist", "Top Genre", "Total Plays", "Forgotten Gem", "Top 5 Songs", "Up Next", 
             "Play Queue", "Appearance", "Grid Columns", "Audio", "Equalizer", "Silence Trimming", 
@@ -219,7 +227,8 @@ class MusicViewModel(
             "Stay Offline", "Enable Online Features", "Online Features",
             "This app can connect to the internet to fetch album art, lyrics, artist bios, and identify songs. Would you like to enable these features or stay offline?",
             "Biography", "Discography (Tap to see tracklist from MusicBrainz)", "Close", "Download from YouTube", "In Library", "Play Queue", "Artist", "Album", "Genre", "Playlist", "Library Insights", "Last played",
-            "Vibe: Energetic", "Vibe: Chill", "Vibe: Party", "On Repeat", "The Time Machine", "New Discoveries", "Scan Missing Gain Tags"
+            "Vibe: Energetic", "Vibe: Chill", "Vibe: Party", "On Repeat", "The Time Machine", "New Discoveries", "Scan Missing Gain Tags",
+            "Download Options", "Download", "WARNING: You are about to download this as a VIDEO file, not just a song. This will take more space.", "Started video download", "Music Video"
         )
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -292,6 +301,7 @@ class MusicViewModel(
 
     private val _isRadioMode = MutableStateFlow(false)
     val isRadioMode: StateFlow<Boolean> = _isRadioMode.asStateFlow()
+    private var radioUseMusicService: Boolean = false
     private var lastRadioVideoUrl: String? = null
 
     fun setAutoTagEnabled(enabled: Boolean) {
@@ -376,67 +386,75 @@ class MusicViewModel(
         
         val baseList = when (selection.view) {
             View.PODCASTS -> songs.filter { isPodcast(it) }
-            View.FAVORITES -> songs.filter { it.isFavorite }
-            View.RECENTLY_PLAYED -> songs.filter { !isPodcast(it) && it.lastPlayed > 0 }.sortedByDescending { it.lastPlayed }
-            View.MOST_PLAYED -> songs.filter { !isPodcast(it) && it.playCount > 0 }.sortedByDescending { it.playCount }
-            View.RECENTLY_ADDED -> songs.filter { !isPodcast(it) }.sortedByDescending { it.dateAdded }
-            View.NEVER_PLAYED -> songs.filter { !isPodcast(it) && it.playCount == 0 }.sortedByDescending { it.dateAdded }
-            View.FORGOTTEN_FAVORITES -> songs.filter { it.isFavorite && (System.currentTimeMillis() - it.lastPlayed > 30L * 24 * 60 * 60 * 1000) }.sortedBy { it.lastPlayed }
-            View.ARTIST_DETAIL -> songs.filter { !isPodcast(it) && MetadataCleaner.normalizeForComparison(it.artist) == MetadataCleaner.normalizeForComparison(selection.artist ?: "") }
+            View.FAVORITES -> songs.filter { it.isFavorite && !it.isVideo }
+            View.RECENTLY_PLAYED -> songs.filter { !isPodcast(it) && !it.isVideo && it.lastPlayed > 0 }.sortedByDescending { it.lastPlayed }
+            View.MOST_PLAYED -> songs.filter { !isPodcast(it) && !it.isVideo && it.playCount > 0 }.sortedByDescending { it.playCount }
+            View.RECENTLY_ADDED -> songs.filter { !isPodcast(it) && !it.isVideo }.sortedByDescending { it.dateAdded }
+            View.NEVER_PLAYED -> songs.filter { !isPodcast(it) && !it.isVideo && it.playCount == 0 }.sortedByDescending { it.dateAdded }
+            View.FORGOTTEN_FAVORITES -> songs.filter { it.isFavorite && !it.isVideo && (System.currentTimeMillis() - it.lastPlayed > 30L * 24 * 60 * 60 * 1000) }.sortedBy { it.lastPlayed }
+            View.ARTIST_DETAIL -> songs.filter { !isPodcast(it) && !it.isVideo && MetadataCleaner.normalizeForComparison(it.artist) == MetadataCleaner.normalizeForComparison(selection.artist ?: "") }
             View.ALBUM_DETAIL -> songs.filter { 
-                !isPodcast(it) && 
+                !isPodcast(it) && !it.isVideo &&
                 MetadataCleaner.normalizeForComparison(it.album) == MetadataCleaner.normalizeForComparison(selection.album ?: "") &&
                 (selection.artist == null || MetadataCleaner.normalizeForComparison(it.artist) == MetadataCleaner.normalizeForComparison(selection.artist ?: ""))
             }
-            View.GENRE_DETAIL -> songs.filter { !isPodcast(it) && (it.genre ?: "Unknown").equals(selection.genre, ignoreCase = true) }
+            View.GENRE_DETAIL -> songs.filter { !isPodcast(it) && !it.isVideo && (it.genre ?: "Unknown").equals(selection.genre, ignoreCase = true) }
             View.DECADE_DETAIL -> songs.filter { 
-                !isPodcast(it) && selection.decade != null && 
+                !isPodcast(it) && !it.isVideo && selection.decade != null && 
                 (if (selection.decade > 0) (it.year >= selection.decade && it.year < selection.decade + 10) else it.year <= 0)
             }
             View.PLAYLIST_DETAIL -> {
                 if (selection.playlist?.id ?: -1 < 0) {
-                    // Smart Playlist Logic
                     when (selection.playlist?.name) {
                         "On Repeat" -> {
                             val twoWeeksAgo = System.currentTimeMillis() - (14L * 24 * 60 * 60 * 1000)
-                            songs.filter { it.lastPlayed > twoWeeksAgo }.sortedByDescending { it.playCount }.take(50)
+                            songs.filter { it.lastPlayed > twoWeeksAgo && !it.isVideo }.sortedByDescending { it.playCount }.take(50)
                         }
                         "The Time Machine" -> {
                             val sixMonthsAgo = System.currentTimeMillis() - (180L * 24 * 60 * 60 * 1000)
-                            songs.filter { it.lastPlayed < sixMonthsAgo && it.isFavorite }.shuffled().take(50)
+                            songs.filter { it.lastPlayed < sixMonthsAgo && it.isFavorite && !it.isVideo }.shuffled().take(50)
                         }
                         "New Discoveries" -> {
                             val sevenDaysAgo = System.currentTimeMillis() - (7L * 24 * 60 * 60 * 1000)
-                            songs.filter { it.dateAdded > sevenDaysAgo && it.playCount == 0 }.sortedByDescending { it.dateAdded }
+                            songs.filter { it.dateAdded > sevenDaysAgo && it.playCount == 0 && !it.isVideo }.sortedByDescending { it.dateAdded }
                         }
                         "Vibe: Energetic" -> {
                             val energeticGenres = listOf("rock", "metal", "edm", "dance", "electronic", "pop", "hip hop", "rap", "punk", "techno", "hardstyle", "gym", "workout", "power", "aggressive", "upbeat", "fast")
-                            val matched = songs.filter { !isPodcast(it) && energeticGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
+                            val matched = songs.filter { !isPodcast(it) && !it.isVideo && energeticGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
                             if (matched.isEmpty()) {
-                                songs.filter { !isPodcast(it) && (it.title.lowercase().contains("workout") || it.path.lowercase().contains("energetic")) }.take(100)
+                                songs.filter { !isPodcast(it) && !it.isVideo && (it.title.lowercase().contains("workout") || it.path.lowercase().contains("energetic")) }.take(100)
                             } else matched.shuffled().take(100)
                         }
                         "Vibe: Chill" -> {
                             val chillGenres = listOf("jazz", "acoustic", "lofi", "lo-fi", "ambient", "blues", "classical", "soul", "r&b", "chill", "relax", "folk", "downtempo", "smooth", "piano", "study", "sleep", "lounge", "easy listening", "new age", "instrumental", "meditation")
-                            val matched = songs.filter { !isPodcast(it) && chillGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
+                            val matched = songs.filter { !isPodcast(it) && !it.isVideo && chillGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
                             if (matched.isEmpty()) {
-                                songs.filter { !isPodcast(it) && (it.title.lowercase().contains("chill") || it.path.lowercase().contains("chill")) }.take(100)
+                                songs.filter { !isPodcast(it) && !it.isVideo && (it.title.lowercase().contains("chill") || it.path.lowercase().contains("chill")) }.take(100)
                             } else matched.shuffled().take(100)
                         }
                         "Vibe: Party" -> {
                             val partyGenres = listOf("dance", "pop", "edm", "disco", "funk", "party", "club", "house", "reggaeton", "remix", "festival")
-                            val matched = songs.filter { !isPodcast(it) && partyGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
+                            val matched = songs.filter { !isPodcast(it) && !it.isVideo && partyGenres.any { g -> it.genre?.lowercase()?.contains(g) == true } }
                             if (matched.isEmpty()) {
-                                songs.filter { !isPodcast(it) && (it.title.lowercase().contains("party") || it.path.lowercase().contains("party")) }.take(100)
+                                songs.filter { !isPodcast(it) && !it.isVideo && (it.title.lowercase().contains("party") || it.path.lowercase().contains("party")) }.take(100)
                             } else matched.shuffled().take(100)
                         }
-                        else -> emptyList()
+                        else -> {
+                            val playlistId = selection.playlist?.id ?: -1
+                            if (playlistId <= -1000) {
+                                val realId = -playlistId - 1000
+                                val smartPlaylist = repository.metadataDao.getAllSmartPlaylists().find { it.id == realId }
+                                if (smartPlaylist != null) {
+                                    getSongsForSmartPlaylist(smartPlaylist, songs.filter { !it.isVideo })
+                                } else emptyList()
+                            } else emptyList()
+                        }
                     }
                 } else {
                     songs.filter { it.path in selection.playlistPaths }
                 }
             }
-            else -> songs.filter { !isPodcast(it) }
+            else -> songs.filter { !isPodcast(it) && !it.isVideo }
         }
 
         val sortedList = when (order) {
@@ -461,6 +479,96 @@ class MusicViewModel(
 
     private val _currentSong = mutableStateOf<Song?>(null)
     val currentSong: State<Song?> = _currentSong
+
+    private val _editingSong = mutableStateOf<Song?>(null)
+    val editingSong: State<Song?> = _editingSong
+
+    fun setEditingSong(song: Song?) {
+        _editingSong.value = song
+        if (song != null) setView(View.TAG_EDITOR)
+    }
+
+    fun startTrimmer(song: Song) {
+        _editingSong.value = song
+        setView(View.TRIMMER)
+    }
+
+    private val _isTrimming = MutableStateFlow(false)
+    val isTrimming = _isTrimming.asStateFlow()
+
+    fun trimAudio(song: Song, startTimeMs: Long, endTimeMs: Long) {
+        if (startTimeMs >= endTimeMs) return
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            _isTrimming.value = true
+            try {
+                val inputPath = song.path
+                val extension = inputPath.substringAfterLast(".", "mp3")
+                val outputFile = File(
+                    android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MUSIC),
+                    "Trimmed_${System.currentTimeMillis()}.$extension"
+                )
+                
+                val extractor = android.media.MediaExtractor()
+                extractor.setDataSource(inputPath)
+                
+                val trackIndex = 0 
+                extractor.selectTrack(trackIndex)
+                val format = extractor.getTrackFormat(trackIndex)
+                
+                val muxer = android.media.MediaMuxer(outputFile.absolutePath, android.media.MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                val muxerTrackIndex = muxer.addTrack(format)
+                muxer.start()
+                
+                val bufferSize = 1024 * 1024
+                val buffer = java.nio.ByteBuffer.allocate(bufferSize)
+                val bufferInfo = android.media.MediaCodec.BufferInfo()
+                
+                extractor.seekTo(startTimeMs * 1000, android.media.MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+                
+                while (true) {
+                    bufferInfo.offset = 0
+                    bufferInfo.size = extractor.readSampleData(buffer, 0)
+                    if (bufferInfo.size < 0) break
+                    
+                    bufferInfo.presentationTimeUs = extractor.sampleTime
+                    if (bufferInfo.presentationTimeUs > endTimeMs * 1000) break
+                    
+                    bufferInfo.flags = extractor.sampleFlags
+                    muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                    extractor.advance()
+                }
+                
+                muxer.stop()
+                muxer.release()
+                extractor.release()
+                
+                repository.metadataDao.insertMetadata(com.steel101.musicplayer.data.MetadataEntity(
+                    songKey = outputFile.absolutePath,
+                    artistMbid = null, albumMbid = null, artistImageUrl = null, albumImageUrl = null,
+                    enrichedTitle = outputFile.nameWithoutExtension,
+                    enrichedArtist = song.artist,
+                    enrichedAlbum = "Trimmed",
+                    isHidden = true,
+                    hasEmbeddedArt = false,
+                    hasEmbeddedArtChecked = true
+                ))
+                
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Saved to: ${outputFile.name} (Hidden from library)", android.widget.Toast.LENGTH_LONG).show()
+                    loadSongs()
+                    setView(View.SONGS)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Trim failed", e)
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Trim failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                _isTrimming.value = false
+            }
+        }
+    }
 
     private val _backImageUrl = mutableStateOf<String?>(null)
     val backImageUrl: State<String?> = _backImageUrl
@@ -488,6 +596,59 @@ class MusicViewModel(
 
     private val _playlists = MutableStateFlow<List<PlaylistEntity>>(emptyList())
     val playlists = _playlists.asStateFlow()
+
+    private val _smartPlaylists = MutableStateFlow<List<SmartPlaylistEntity>>(emptyList())
+    val smartPlaylists = _smartPlaylists.asStateFlow()
+
+    fun loadSmartPlaylists() {
+        viewModelScope.launch {
+            _smartPlaylists.value = repository.metadataDao.getAllSmartPlaylists()
+        }
+    }
+
+    fun createSmartPlaylist(name: String, rulesJson: String) {
+        viewModelScope.launch {
+            repository.metadataDao.insertSmartPlaylist(SmartPlaylistEntity(name = name, rulesJson = rulesJson))
+            loadPlaylists()
+            loadSmartPlaylists()
+        }
+    }
+
+    fun getSongsForSmartPlaylist(playlist: SmartPlaylistEntity, songsToFilter: List<Song>? = null): List<Song> {
+        val allSongs = songsToFilter ?: _songs.value
+        
+        try {
+            val rules = com.google.gson.Gson().fromJson(playlist.rulesJson, Map::class.java) as Map<String, Any>
+            var filtered = allSongs
+            
+            rules["genre"]?.let { g ->
+                filtered = filtered.filter { it.genre?.equals(g as String, ignoreCase = true) == true }
+            }
+            rules["minYear"]?.let { y ->
+                filtered = filtered.filter { it.year >= (y as Double).toInt() }
+            }
+            rules["maxYear"]?.let { y ->
+                filtered = filtered.filter { it.year <= (y as Double).toInt() }
+            }
+            rules["minPlayCount"]?.let { p ->
+                filtered = filtered.filter { it.playCount >= (p as Double).toInt() }
+            }
+            rules["isFavorite"]?.let { f ->
+                if (f as Boolean) filtered = filtered.filter { it.isFavorite }
+            }
+            
+            val limit = (rules["limit"] as? Double)?.toInt() ?: 100
+            return filtered.shuffled().take(limit)
+        } catch (e: Exception) {
+            return when (playlist.name) {
+                "Recently Added" -> allSongs.sortedByDescending { it.dateAdded }.take(50)
+                "Most Played" -> allSongs.sortedByDescending { it.playCount }.filter { it.playCount > 0 }
+                "Favorites" -> allSongs.filter { it.isFavorite }
+                "Never Played" -> allSongs.filter { it.playCount == 0 }
+                else -> allSongs
+            }
+        }
+    }
 
     private val _dominantColor = mutableIntStateOf(0xFF1C1B1F.toInt())
     val dominantColor: State<Int> = _dominantColor
@@ -522,6 +683,58 @@ class MusicViewModel(
     fun setGridColumns(columns: Int) {
         _gridColumns.value = columns
         sharedPrefs.edit().putInt("grid_columns", columns).apply()
+    }
+
+    private val _glassEffectEnabled = MutableStateFlow(sharedPrefs.getBoolean("glass_effect_enabled", true))
+    val glassEffectEnabled: StateFlow<Boolean> = _glassEffectEnabled.asStateFlow()
+
+    fun setGlassEffectEnabled(enabled: Boolean) {
+        _glassEffectEnabled.value = enabled
+        sharedPrefs.edit().putBoolean("glass_effect_enabled", enabled).apply()
+    }
+
+    private val _dynamicThemingEnabled = MutableStateFlow(sharedPrefs.getBoolean("dynamic_theming_enabled", true))
+    val dynamicThemingEnabled: StateFlow<Boolean> = _dynamicThemingEnabled.asStateFlow()
+
+    fun setDynamicThemingEnabled(enabled: Boolean) {
+        _dynamicThemingEnabled.value = enabled
+        sharedPrefs.edit().putBoolean("dynamic_theming_enabled", enabled).apply()
+    }
+
+    fun exportLibraryData(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val metadata = repository.metadataDao.getAllMetadata()
+                val playlists = repository.metadataDao.getAllPlaylists()
+                val smartPlaylists = repository.metadataDao.getAllSmartPlaylists()
+                
+                val data = mapOf(
+                    "metadata" to metadata,
+                    "playlists" to playlists,
+                    "smart_playlists" to smartPlaylists
+                )
+                
+                val json = com.google.gson.Gson().toJson(data)
+                context.contentResolver.openOutputStream(uri)?.use { 
+                    it.write(json.toByteArray())
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Export failed", e)
+            }
+        }
+    }
+
+    fun importLibraryData(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                if (json != null) {
+                    val data = com.google.gson.Gson().fromJson(json, Map::class.java)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Import failed", e)
+            }
+        }
     }
 
     private val _excludedFolders = MutableStateFlow<List<String>>(emptyList())
@@ -585,6 +798,24 @@ class MusicViewModel(
         _playbackPitch.value = pitch
         sharedPrefs.edit().putFloat("playback_pitch", pitch).apply()
         sendEqCommand("SET_PLAYBACK_PITCH", Bundle().apply { putFloat("pitch", pitch) })
+    }
+
+    private val _bitPerfectEnabled = MutableStateFlow(sharedPrefs.getBoolean("bit_perfect_enabled", false))
+    val bitPerfectEnabled = _bitPerfectEnabled.asStateFlow()
+
+    fun setBitPerfectEnabled(enabled: Boolean) {
+        _bitPerfectEnabled.value = enabled
+        sharedPrefs.edit().putBoolean("bit_perfect_enabled", enabled).apply()
+        sendEqCommand("SET_BIT_PERFECT_ENABLED", Bundle().apply { putBoolean("enabled", enabled) })
+    }
+
+    private val _ignoreNoMedia = MutableStateFlow(sharedPrefs.getBoolean("ignore_nomedia", false))
+    val ignoreNoMedia = _ignoreNoMedia.asStateFlow()
+
+    fun setIgnoreNoMedia(enabled: Boolean) {
+        _ignoreNoMedia.value = enabled
+        sharedPrefs.edit().putBoolean("ignore_nomedia", enabled).apply()
+        loadSongs()
     }
 
     private fun setupVisualizer(sessionId: Int) {
@@ -699,7 +930,7 @@ class MusicViewModel(
     }
 
     enum class SortOrder { TITLE, ARTIST, ALBUM, GENRE, DATE_ADDED, PLAY_COUNT }
-    enum class View { SONGS, ARTISTS, ALBUMS, ARTIST_DETAIL, ALBUM_DETAIL, FAVORITES, PLAYLISTS, PLAYLIST_DETAIL, RECENTLY_PLAYED, MOST_PLAYED, RECENTLY_ADDED, NEVER_PLAYED, EQUALIZER, SETTINGS, QUEUE, PODCASTS, GENRES, GENRE_DETAIL, FOLDERS, INSIGHTS, FORGOTTEN_FAVORITES, YT_SEARCH, DECADES, DECADE_DETAIL, ABOUT }
+    enum class View { SONGS, ARTISTS, ALBUMS, ARTIST_DETAIL, ALBUM_DETAIL, FAVORITES, PLAYLISTS, PLAYLIST_DETAIL, RECENTLY_PLAYED, MOST_PLAYED, RECENTLY_ADDED, NEVER_PLAYED, EQUALIZER, SETTINGS, QUEUE, PODCASTS, GENRES, GENRE_DETAIL, FOLDERS, INSIGHTS, FORGOTTEN_FAVORITES, YT_SEARCH, DECADES, DECADE_DETAIL, ABOUT, DISCOVER, TAG_EDITOR, MUSIC_QUIZ, TRIMMER, SMART_PLAYLIST_BUILDER }
     data class LyricLine(val timeMs: Long, val text: String, var translatedText: String? = null)
 
     private val _artistBio = MutableStateFlow<String?>(null)
@@ -744,18 +975,280 @@ class MusicViewModel(
 
     private val fingerprintSemaphore = Semaphore(1)
 
+    private val _discoveryResults = MutableStateFlow<Map<String, List<StreamInfoItem>>>(emptyMap())
+    val discoveryResults: StateFlow<Map<String, List<StreamInfoItem>>> = _discoveryResults.asStateFlow()
+
+    private val _isDiscovering = MutableStateFlow(false)
+    val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
+
+    fun discoverMusic() {
+        if (!_isOnlineMode.value || _isDiscovering.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isDiscovering.value = true
+            try {
+                val results = mutableMapOf<String, List<StreamInfoItem>>()
+                val youtube = ServiceList.YouTube
+                val itemsPerRow = 15
+
+                fun getMusicResults(query: String): List<StreamInfoItem> {
+                    fun fetchWithFilter(filter: String): List<StreamInfoItem> {
+                        return try {
+                            val qh = youtube.searchQHFactory.fromQuery(query, listOf(filter), "")
+                            val extractor = youtube.getSearchExtractor(qh)
+                            extractor.fetchPage()
+                            extractor.initialPage.items.filterIsInstance<StreamInfoItem>()
+                                .filter { it.streamType == StreamType.AUDIO_STREAM || it.streamType == StreamType.VIDEO_STREAM }
+                        } catch (e: Exception) { emptyList() }
+                    }
+
+                    var items = fetchWithFilter("songs")
+                    if (items.isEmpty()) {
+                        items = fetchWithFilter("music_songs")
+                    }
+                    if (items.isEmpty()) {
+                        try {
+                            val extractor = youtube.getSearchExtractor(query)
+                            extractor.fetchPage()
+                            items = extractor.initialPage.items.filterIsInstance<StreamInfoItem>()
+                        } catch (e: Exception) {}
+                    }
+                    return items
+                }
+
+                val topArtists = _songs.value
+                    .filter { it.playCount > 0 }
+                    .groupBy { it.artist }
+                    .toList()
+                    .sortedByDescending { it.second.sumOf { s -> s.playCount } }
+                    .take(3)
+                    .map { it.first }
+
+                topArtists.forEach { artist ->
+                    val musicItems = getMusicResults("$artist similar artists mix")
+                    if (musicItems.isNotEmpty()) {
+                        results["More like $artist"] = musicItems.take(itemsPerRow)
+                    }
+                }
+
+                val trendingQueries = listOf(
+                    "Global Top 100 Songs 2024" to "Global Hits",
+                    "Viral TikTok Songs 2024" to "Viral Now",
+                    "New Music Friday Playlist 2024" to "Fresh Releases",
+                    "Billboard Hot 100 Today" to "Chart Toppers"
+                ).shuffled().take(3)
+
+                trendingQueries.forEach { (query, title) ->
+                    val musicItems = getMusicResults(query)
+                    if (musicItems.isNotEmpty()) {
+                        results[title] = musicItems.take(itemsPerRow)
+                    }
+                }
+
+                val moodQueries = listOf(
+                    "Chill Lofi Hip Hop Mix" to "Relax & Chill",
+                    "High Energy Workout Music 2024" to "Workout Pump",
+                    "Deep Focus Study Music" to "Focus & Study",
+                    "Late Night Driving Vibes" to "Night Drive",
+                    "Coffee Shop Acoustic Vibes" to "Acoustic Morning",
+                    "Party Hits Mix 2024" to "Party Time",
+                    "Sad Soulful Melodies" to "Heartbreak & Soul",
+                    "Epic Cinematic Orchestral Music" to "Cinematic Power"
+                ).shuffled().take(4)
+
+                moodQueries.forEach { (query, title) ->
+                    val musicItems = getMusicResults(query)
+                    if (musicItems.isNotEmpty()) {
+                        results[title] = musicItems.take(itemsPerRow)
+                    }
+                }
+
+                val eraQueries = listOf(
+                    "80s Rock & Pop Hits" to "80s Classics",
+                    "90s RnB & Hip Hop Essentials" to "90s Nostalgia",
+                    "2000s Pop Punk & Emo Hits" to "00s Rewind",
+                    "70s Disco & Funk Essentials" to "Disco Fever",
+                    "60s Rock and Roll Legends" to "The Golden 60s"
+                ).shuffled().take(3)
+
+                eraQueries.forEach { (query, title) ->
+                    val musicItems = getMusicResults(query)
+                    if (musicItems.isNotEmpty()) {
+                        results[title] = musicItems.take(itemsPerRow)
+                    }
+                }
+
+                val genreExploration = listOf(
+                    "Best Modern Jazz 2024" to "Explore Jazz",
+                    "Top Techno & House Mixes 2024" to "Dance Floor",
+                    "Rising Indie Pop Artists" to "Indie Discoveries",
+                    "Latin Hits 2024 Reggaeton" to "Latin Vibes",
+                    "Modern Country Essentials 2024" to "Modern Country",
+                    "Deep Blues & Rock Legends" to "Blues & Soul",
+                    "Best K-Pop Hits 2024" to "K-Pop Wave",
+                    "Reggae & Dancehall Classics" to "Island Vibes"
+                ).shuffled().take(4)
+
+                genreExploration.forEach { (query, title) ->
+                    val musicItems = getMusicResults(query)
+                    if (musicItems.isNotEmpty()) {
+                        results[title] = musicItems.take(itemsPerRow)
+                    }
+                }
+
+                val instrumentalQueries = listOf(
+                    "Rainy Night Jazz Piano" to "Rainy Jazz",
+                    "Nature Sounds & Ambient Meditation" to "Zen Mode",
+                    "Acoustic Guitar Fingerstyle Covers" to "Guitar Legends",
+                    "Synthesizer Dark Synthwave Mix" to "Retro Future"
+                ).shuffled().take(2)
+
+                instrumentalQueries.forEach { (query, title) ->
+                    val musicItems = getMusicResults(query)
+                    if (musicItems.isNotEmpty()) {
+                        results[title] = musicItems.take(itemsPerRow)
+                    }
+                }
+
+                val hiddenGemsItems = getMusicResults("underrated artists hidden gems 2024")
+                if (hiddenGemsItems.isNotEmpty()) {
+                    results["Hidden Gems"] = hiddenGemsItems.take(itemsPerRow)
+                }
+
+                _discoveryResults.value = results
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Discovery failed", e)
+            } finally {
+                _isDiscovering.value = false
+            }
+        }
+    }
+
+    data class QuizState(
+        val currentSong: Song? = null,
+        val options: List<String> = emptyList(),
+        val score: Int = 0,
+        val attempts: Int = 0,
+        val lastCorrect: Boolean? = null
+    )
+    private val _quizState = MutableStateFlow(QuizState())
+    val quizState = _quizState.asStateFlow()
+
+    fun startNewQuiz() {
+        val allSongs = _songs.value.filter { !it.isHidden }
+        if (allSongs.size < 4) return
+        
+        val correctSong = allSongs.random()
+        val otherOptions = allSongs.filter { it.id != correctSong.id }.shuffled().take(3).map { it.title }
+        val options = (otherOptions + correctSong.title).shuffled()
+        
+        _quizState.value = _quizState.value.copy(
+            currentSong = correctSong,
+            options = options,
+            lastCorrect = null
+        )
+        
+        playSong(correctSong)
+        viewModelScope.launch {
+            delay(1000)
+            val randomStart = if (correctSong.duration > 10000) (0..(correctSong.duration - 10000)).random() else 0L
+            seekTo(randomStart)
+        }
+    }
+
+    fun resetQuiz() {
+        _quizState.value = QuizState()
+        startNewQuiz()
+    }
+
+    fun submitQuizAnswer(answer: String) {
+        val isCorrect = answer == _quizState.value.currentSong?.title
+        _quizState.value = _quizState.value.copy(
+            score = if (isCorrect) _quizState.value.score + 1 else _quizState.value.score,
+            attempts = _quizState.value.attempts + 1,
+            lastCorrect = isCorrect
+        )
+        if (isCorrect) {
+            viewModelScope.launch {
+                delay(1500)
+                startNewQuiz()
+            }
+        }
+    }
+
+    private val streamingServer = com.steel101.musicplayer.network.LocalStreamingServer()
+    private val _isStreaming = MutableStateFlow(false)
+    val isStreaming = _isStreaming.asStateFlow()
+
+    fun toggleStreaming() {
+        if (_isStreaming.value) {
+            streamingServer.stop()
+            _isStreaming.value = false
+        } else {
+            streamingServer.start(8080, { _currentSong.value }, { _songs.value })
+            _isStreaming.value = true
+        }
+    }
+
+    fun getStreamingUrl(): String? {
+        return try {
+            val ip = streamingServer.getIpAddress()
+            if (ip != null) "http://$ip:8080" else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private val _isSearchingYt = mutableStateOf(false)
     val isSearchingYt: State<Boolean> = _isSearchingYt
+
+    private val _ytSearchSourceMusic = MutableStateFlow(false)
+    val ytSearchSourceMusic: StateFlow<Boolean> = _ytSearchSourceMusic.asStateFlow()
+
+    fun setYtSearchSourceMusic(enabled: Boolean) {
+        _ytSearchSourceMusic.value = enabled
+    }
 
     fun searchYoutube(query: String) {
         if (query.isBlank() || !_isOnlineMode.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSearchingYt.value = true
             try {
-                val youtube = ServiceList.YouTube
-                val searchExtractor = youtube.getSearchExtractor(query)
+                val service = ServiceList.YouTube
+                var searchExtractor = if (_ytSearchSourceMusic.value) {
+                    try {
+                        val qh = service.getSearchQHFactory().fromQuery(query, listOf("songs"), "")
+                        service.getSearchExtractor(qh)
+                    } catch (e: Exception) {
+                        try {
+                            val qh = service.getSearchQHFactory().fromQuery(query, listOf("music_songs"), "")
+                            service.getSearchExtractor(qh)
+                        } catch (e2: Exception) {
+                            service.getSearchExtractor(query)
+                        }
+                    }
+                } else {
+                    service.getSearchExtractor(query)
+                }
+
                 searchExtractor.fetchPage()
+                
+                if (_ytSearchSourceMusic.value && searchExtractor.initialPage.items.isEmpty()) {
+                    try {
+                        val qh = service.getSearchQHFactory().fromQuery(query, listOf("music_songs"), "")
+                        val altExtractor = service.getSearchExtractor(qh)
+                        altExtractor.fetchPage()
+                        if (altExtractor.initialPage.items.isNotEmpty()) {
+                            searchExtractor = altExtractor
+                        }
+                    } catch (e: Exception) {}
+                }
+
                 val results = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>()
+                    .filter { 
+                        if (_ytSearchSourceMusic.value) {
+                            it.streamType == StreamType.AUDIO_STREAM || it.streamType == StreamType.VIDEO_STREAM
+                        } else true
+                    }
                 _ytSearchResults.value = results
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Failed to search YT", e)
@@ -818,13 +1311,15 @@ class MusicViewModel(
         }
     }
 
-    fun downloadFromYoutube(trackTitle: String, artistName: String) {
+    fun downloadFromYoutube(trackTitle: String, artistName: String, isVideo: Boolean = false) {
         val intent = Intent(context, com.steel101.musicplayer.network.DownloadService::class.java).apply {
             putExtra("trackTitle", trackTitle)
             putExtra("artistName", artistName)
+            putExtra("isVideo", isVideo)
         }
         context.startForegroundService(intent)
-        android.widget.Toast.makeText(context, "Started download: $trackTitle", android.widget.Toast.LENGTH_SHORT).show()
+        val msg = if (isVideo) "Started video download" else "Started download"
+        android.widget.Toast.makeText(context, "$msg: $trackTitle", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     fun fetchArtistInfo(artistName: String) {
@@ -860,6 +1355,99 @@ class MusicViewModel(
 
     private var controllerFuture: ListenableFuture<MediaController>
     private var controller: MediaController? = null
+    val player: Player? get() = controller
+    
+    private val _isVideoMode = mutableStateOf(false)
+    val isVideoMode: State<Boolean> = _isVideoMode
+
+    fun playMusicVideo(song: Song) {
+        if (!_isOnlineMode.value) return
+        
+        val currentItem = controller?.currentMediaItem
+        val originalLocalId = currentItem?.mediaMetadata?.extras?.getString("original_local_id")
+        
+        if (_isVideoMode.value && _currentSong.value?.id == song.id) {
+            controller?.let { player ->
+                val currentPosition = player.currentPosition
+                val currentIndex = player.currentMediaItemIndex
+                if (currentIndex != -1) {
+                    if (originalLocalId != null) {
+                        val originalSong = _songs.value.find { it.id.toString() == originalLocalId }
+                        if (originalSong != null) {
+                            player.replaceMediaItem(currentIndex, originalSong.toMediaItem())
+                        } else {
+                            player.replaceMediaItem(currentIndex, song.toMediaItem())
+                        }
+                    } else {
+                        player.replaceMediaItem(currentIndex, song.toMediaItem())
+                    }
+                    player.seekTo(currentIndex, currentPosition)
+                    player.prepare()
+                    player.play()
+                }
+            }
+            _isVideoMode.value = false
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSearching.value = true
+            try {
+                val query = "${song.artist} - ${song.title} official music video"
+                val youtube = ServiceList.YouTube
+                val searchExtractor = youtube.getSearchExtractor(query)
+                searchExtractor.fetchPage()
+                val videoItem = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>().firstOrNull()
+                if (videoItem != null) {
+                    val streamData = resolveStreamUrl(videoItem.url, video = true) ?: return@launch
+                    val streamUrl = streamData.first
+                    val artworkUrl = streamData.second
+
+                    withContext(Dispatchers.Main) {
+                        val extras = Bundle().apply {
+                            putLong("duration", videoItem.duration * 1000L)
+                            putBoolean("is_video", true)
+                            if (song.id != -1L) {
+                                putString("original_local_id", song.id.toString())
+                            } else {
+                                originalLocalId?.let { putString("original_local_id", it) }
+                            }
+                        }
+                        val metadata = MediaMetadata.Builder()
+                            .setTitle(videoItem.name)
+                            .setArtist(videoItem.uploaderName)
+                            .setArtworkUri(artworkUrl?.let { Uri.parse(it) } ?: videoItem.thumbnails?.firstOrNull()?.url?.let { Uri.parse(it) })
+                            .setExtras(extras)
+                            .build()
+
+                        val mediaItem = MediaItem.Builder()
+                            .setMediaId("yt_video_${videoItem.url.hashCode()}")
+                            .setUri(Uri.parse(streamUrl))
+                            .setMediaMetadata(metadata)
+                            .build()
+
+                        controller?.let { player ->
+                            val currentPosition = player.currentPosition
+                            val currentIndex = player.currentMediaItemIndex
+                            if (currentIndex != -1) {
+                                player.replaceMediaItem(currentIndex, mediaItem)
+                                player.seekTo(currentIndex, currentPosition)
+                            } else {
+                                player.setMediaItem(mediaItem)
+                            }
+                            player.prepare()
+                            player.play()
+                        }
+                        _isVideoMode.value = true
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MusicViewModel", "Failed to play music video for ${song.title}", e)
+            } finally {
+                _isSearching.value = false
+            }
+        }
+    }
+
     private var positionUpdateJob: Job? = null
     private var sleepTimerJob: Job? = null
     
@@ -947,6 +1535,9 @@ class MusicViewModel(
                     
                     updateTotalPlayTime()
                     
+                    val isVideo = mediaItem?.mediaMetadata?.extras?.getBoolean("is_video") ?: false
+                    _isVideoMode.value = isVideo || mediaItem?.mediaId?.startsWith("yt_video") == true
+
                     if (_isRadioMode.value && controller != null) {
                         val currentQueue = controller?.mediaItemCount ?: 0
                         val currentIndex = controller?.currentMediaItemIndex ?: 0
@@ -1040,6 +1631,7 @@ class MusicViewModel(
 
         loadSongs()
         loadPlaylists()
+        loadSmartPlaylists()
         loadExcludedFolders()
         if (_isAppTranslationEnabled.value) {
             translateAppStrings()
@@ -1167,7 +1759,9 @@ class MusicViewModel(
     private fun loadPlaylists() {
         viewModelScope.launch {
             val dbPlaylists = repository.getPlaylists()
-            val smartPlaylists = listOf(
+            val userSmartPlaylists = repository.metadataDao.getAllSmartPlaylists()
+            
+            val hardcodedSmartPlaylists = listOf(
                 PlaylistEntity(id = -1, name = "On Repeat"),
                 PlaylistEntity(id = -2, name = "The Time Machine"),
                 PlaylistEntity(id = -3, name = "New Discoveries"),
@@ -1175,7 +1769,12 @@ class MusicViewModel(
                 PlaylistEntity(id = -5, name = "Vibe: Chill"),
                 PlaylistEntity(id = -6, name = "Vibe: Party")
             )
-            _playlists.value = smartPlaylists + dbPlaylists
+            
+            val mappedUserSmart = userSmartPlaylists.map { 
+                PlaylistEntity(id = -1000 - it.id, name = it.name)
+            }
+            
+            _playlists.value = hardcodedSmartPlaylists + mappedUserSmart + dbPlaylists
         }
     }
 
@@ -1320,7 +1919,6 @@ class MusicViewModel(
     private fun fetchLyrics(song: Song) {
         viewModelScope.launch {
             try {
-                // 1. Check for manually synced local file
                 val localFile = File(context.filesDir, "lyrics_${song.id}.lrc")
                 if (localFile.exists()) {
                     val lrcText = localFile.readText()
@@ -1331,7 +1929,6 @@ class MusicViewModel(
                     return@launch
                 }
 
-                // 2. Check for embedded lyrics in the song object (already loaded from tags in Repository)
                 if (!song.lyrics.isNullOrBlank()) {
                     _currentLyrics.value = parseLrc(song.lyrics)
                     if (_isTranslationEnabled.value) {
@@ -1341,8 +1938,6 @@ class MusicViewModel(
                 }
 
                 if (!_isOnlineMode.value) return@launch
-
-                // 3. Online fetch
                 var lrcText: String? = null
                 var isSynced = false
                 val cleanAlbum = if (song.album == "Unknown" || song.album.contains(".mp3", ignoreCase = true)) null else song.album
@@ -1469,7 +2064,7 @@ class MusicViewModel(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                val fetchedSongs = repository.getSongs()
+                val fetchedSongs = repository.getSongs(_ignoreNoMedia.value)
                 _songs.value = fetchedSongs.filter { !it.isHidden }
                 
                 enrichmentJob?.cancel()
@@ -1538,7 +2133,6 @@ class MusicViewModel(
                     if (!response.isSuccessful) return@launch
                     val body = response.body?.string() ?: return@launch
                     
-                    // Basic parsing for Google Translate GTX JSON format: [[["trans","orig",...],...],...]
                     val jsonArray = com.google.gson.JsonParser.parseString(body).asJsonArray
                     val translations = jsonArray.get(0).asJsonArray
                     val fullTranslatedText = StringBuilder()
@@ -1595,10 +2189,11 @@ class MusicViewModel(
         }
     }
 
-    fun playYoutubePreview(item: StreamInfoItem) {
+    fun playYoutubePreview(item: StreamInfoItem, forceAudio: Boolean = false) {
         if (!_isOnlineMode.value) return
         _isRadioMode.value = false
-        playYoutubeStream(item, clearQueue = true)
+        val isVideo = if (forceAudio) false else !_ytSearchSourceMusic.value
+        playYoutubeStream(item, clearQueue = true, isVideo = isVideo)
     }
 
     fun startYoutubeRadio(song: Song) {
@@ -1607,9 +2202,24 @@ class MusicViewModel(
             try {
                 val query = "${song.title} ${song.artist}"
                 val youtube = ServiceList.YouTube
-                val searchExtractor = youtube.getSearchExtractor(query)
+                
+                val searchExtractor = if (_ytSearchSourceMusic.value) {
+                    try {
+                        val qh = youtube.searchQHFactory.fromQuery(query, listOf("music_songs"), "")
+                        youtube.getSearchExtractor(qh)
+                    } catch (e: Exception) {
+                        youtube.getSearchExtractor(query)
+                    }
+                } else {
+                    youtube.getSearchExtractor(query)
+                }
                 searchExtractor.fetchPage()
-                val result = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>().firstOrNull()
+                val result = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>()
+                    .firstOrNull { 
+                        if (_ytSearchSourceMusic.value) {
+                            it.streamType == StreamType.AUDIO_STREAM || it.streamType == StreamType.VIDEO_STREAM
+                        } else true
+                    }
                 
                 if (result != null) {
                     _isRadioMode.value = true
@@ -1623,11 +2233,11 @@ class MusicViewModel(
         }
     }
 
-    fun startYoutubeRadio(item: StreamInfoItem) {
+    fun startYoutubeRadio(item: StreamInfoItem, forceAudio: Boolean = false) {
         if (!_isOnlineMode.value) return
         _isRadioMode.value = true
         lastRadioVideoUrl = item.url
-        playYoutubeStream(item, clearQueue = true)
+        playYoutubeStream(item, clearQueue = true, isVideo = if (forceAudio) false else !_ytSearchSourceMusic.value)
         fetchNextRadioItems()
     }
 
@@ -1639,7 +2249,11 @@ class MusicViewModel(
                 val streamExtractor = youtube.getStreamExtractor(url)
                 streamExtractor.fetchPage()
                 
-                val relatedItems = streamExtractor.relatedItems?.items?.filterIsInstance<StreamInfoItem>() ?: emptyList()
+                val relatedItems = streamExtractor.relatedItems?.items?.filterIsInstance<StreamInfoItem>()?.filter {
+                    if (_ytSearchSourceMusic.value) {
+                        it.streamType == StreamType.AUDIO_STREAM || it.streamType == StreamType.VIDEO_STREAM
+                    } else true
+                } ?: emptyList()
                 relatedItems.take(5).forEach { item ->
                     addYoutubeStreamToQueue(item)
                 }
@@ -1653,15 +2267,19 @@ class MusicViewModel(
         }
     }
 
-    private fun playYoutubeStream(item: StreamInfoItem, clearQueue: Boolean = false) {
+    private fun playYoutubeStream(item: StreamInfoItem, clearQueue: Boolean = false, isVideo: Boolean = false) {
+        if (isVideo) {
+            android.widget.Toast.makeText(context, "Opening video...", android.widget.Toast.LENGTH_SHORT).show()
+        }
         viewModelScope.launch(Dispatchers.IO) {
-            val streamData = resolveStreamUrl(item.url) ?: return@launch
+            val streamData = resolveStreamUrl(item.url, video = isVideo) ?: return@launch
             val streamUrl = streamData.first
             val artworkUrl = streamData.second
 
             withContext(Dispatchers.Main) {
                 val extras = Bundle().apply {
                     putLong("duration", item.duration * 1000L)
+                    putBoolean("is_video", isVideo)
                 }
                 val metadata = MediaMetadata.Builder()
                     .setTitle(item.name)
@@ -1699,8 +2317,10 @@ class MusicViewModel(
                     year = 0,
                     path = "",
                     filename = "",
-                    albumImageUrl = artworkUrl ?: item.thumbnails?.firstOrNull()?.url
+                    albumImageUrl = artworkUrl ?: item.thumbnails?.firstOrNull()?.url,
+                    isVideo = isVideo
                 )
+                _isVideoMode.value = isVideo
             }
         }
     }
@@ -1733,18 +2353,36 @@ class MusicViewModel(
         }
     }
 
-    private suspend fun resolveStreamUrl(url: String): Pair<String, String?>? {
+    private suspend fun resolveStreamUrl(url: String, video: Boolean = false): Pair<String, String?>? {
         return try {
             val youtube = ServiceList.YouTube
             val streamExtractor = youtube.getStreamExtractor(url)
             streamExtractor.fetchPage()
             
-            val audioStream = streamExtractor.audioStreams
-                .filter { it.format?.suffix?.contains("m4a") == true }
-                .maxByOrNull { it.bitrate }
-                ?: streamExtractor.audioStreams.maxByOrNull { it.bitrate }
-
-            audioStream?.url?.let { it to streamExtractor.thumbnails?.firstOrNull()?.url }
+            if (video) {
+                val videoStream = streamExtractor.videoStreams
+                    .filter { it.format?.suffix?.contains("mp4") == true }
+                    .maxByOrNull { it.bitrate }
+                    ?: streamExtractor.videoStreams.maxByOrNull { it.bitrate }
+                
+                if (videoStream?.url != null) {
+                    videoStream.url!! to streamExtractor.thumbnails?.firstOrNull()?.url
+                } else {
+                    val audioStream = streamExtractor.audioStreams.maxByOrNull { it.bitrate }
+                    if (audioStream?.url != null) {
+                        audioStream.url!! to streamExtractor.thumbnails?.firstOrNull()?.url
+                    } else null
+                }
+            } else {
+                val audioStream = streamExtractor.audioStreams
+                    .filter { it.format?.suffix?.contains("m4a") == true }
+                    .maxByOrNull { it.bitrate }
+                    ?: streamExtractor.audioStreams.maxByOrNull { it.bitrate }
+                
+                if (audioStream?.url != null) {
+                    audioStream.url!! to streamExtractor.thumbnails?.firstOrNull()?.url
+                } else null
+            }
         } catch (e: Exception) {
             null
         }
@@ -1979,28 +2617,26 @@ class MusicViewModel(
         }
     }
 
-    private fun performTagWrite(song: Song) {
-        viewModelScope.launch {
-            try {
-                repository.writeTagsToFile(song)
-                repository.renameFileToMatchMetadata(song)?.let {
-                    loadSongs()
-                }
-            } catch (e: Exception) {
-                val isScopedStorageError = e is SecurityException || 
-                                         e.cause is SecurityException
+    private suspend fun performTagWrite(song: Song) {
+        try {
+            repository.writeTagsToFile(song)
+            repository.renameFileToMatchMetadata(song)?.let {
+                loadSongs()
+            }
+        } catch (e: Exception) {
+            val isScopedStorageError = e is SecurityException || 
+                                     e.cause is SecurityException
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && isScopedStorageError) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && isScopedStorageError) {
+                lastFailedSong = song
+                val pendingIntent = MediaStore.createWriteRequest(context.contentResolver, listOf(song.uri))
+                _pendingWriteRequest.value = pendingIntent
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val recoverableSecurityException = e as? android.app.RecoverableSecurityException
+                    ?: e.cause as? android.app.RecoverableSecurityException
+                if (recoverableSecurityException != null) {
                     lastFailedSong = song
-                    val pendingIntent = MediaStore.createWriteRequest(context.contentResolver, listOf(song.uri))
-                    _pendingWriteRequest.value = pendingIntent
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val recoverableSecurityException = e as? android.app.RecoverableSecurityException
-                        ?: e.cause as? android.app.RecoverableSecurityException
-                    if (recoverableSecurityException != null) {
-                        lastFailedSong = song
-                        _pendingWriteRequest.value = recoverableSecurityException.userAction.actionIntent
-                    }
+                    _pendingWriteRequest.value = recoverableSecurityException.userAction.actionIntent
                 }
             }
         }
@@ -2067,6 +2703,45 @@ class MusicViewModel(
         viewModelScope.launch {
             val updatedSong = song.copy(
                 genre = newGenre,
+                manualOverride = true
+            )
+            repository.saveMetadata(updatedSong, isManual = true)
+            performTagWrite(updatedSong)
+            _songs.value = _songs.value.map { if (it.id == song.id) updatedSong else it }
+            
+            loadSongs()
+            
+            if (_currentSong.value?.id == song.id) {
+                _currentSong.value = updatedSong
+            }
+        }
+    }
+
+    fun saveFullMetadata(
+        song: Song,
+        title: String,
+        artist: String,
+        album: String,
+        albumArtist: String?,
+        genre: String?,
+        year: Int,
+        trackNumber: Int,
+        discNumber: Int,
+        composer: String?,
+        comment: String?
+    ) {
+        viewModelScope.launch {
+            val updatedSong = song.copy(
+                title = title,
+                artist = artist,
+                album = album,
+                albumArtist = albumArtist,
+                genre = genre,
+                year = year,
+                trackNumber = trackNumber,
+                discNumber = discNumber,
+                composer = composer,
+                comment = comment,
                 manualOverride = true
             )
             repository.saveMetadata(updatedSong, isManual = true)
@@ -2241,6 +2916,7 @@ class MusicViewModel(
 
         val extras = Bundle().apply {
             this@toMediaItem.trackGain?.let { putFloat("track_gain", it) }
+            putBoolean("is_video", this@toMediaItem.isVideo)
         }
 
         val metadata = MediaMetadata.Builder()
@@ -2251,16 +2927,28 @@ class MusicViewModel(
             .setExtras(extras)
             .build()
 
+        val mediaId = if (this.id == -1L) {
+            "yt_audio_${this.uri.toString().hashCode()}"
+        } else {
+            this.id.toString()
+        }
+
         return MediaItem.Builder()
-            .setMediaId(this.id.toString())
+            .setMediaId(mediaId)
             .setUri(this.uri)
             .setMediaMetadata(metadata)
             .build()
     }
 
     fun seekTo(positionMs: Long) { controller?.seekTo(positionMs) }
-    fun skipNext() { controller?.seekToNext() }
-    fun skipPrevious() { controller?.seekToPrevious() }
+    fun skipNext() { 
+        _isVideoMode.value = false
+        controller?.seekToNext() 
+    }
+    fun skipPrevious() { 
+        _isVideoMode.value = false
+        controller?.seekToPrevious() 
+    }
     fun toggleRepeatMode() {
         controller?.repeatMode = when (_repeatMode.intValue) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
@@ -2281,7 +2969,10 @@ class MusicViewModel(
             sendEqCommand("FADE_IN", Bundle().apply { putInt("duration", 400) })
         }
     }
-    fun stop() { controller?.stop() }
+    fun stop() { 
+        controller?.stop() 
+        _isVideoMode.value = false
+    }
 
     fun identifySong(song: Song) {
         if (!_isOnlineMode.value) return

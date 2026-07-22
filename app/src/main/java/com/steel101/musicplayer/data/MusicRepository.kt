@@ -117,6 +117,11 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
             if (song.year > 0) propertyMap["DATE"] = arrayOf(song.year.toString())
             song.genre?.let { propertyMap["GENRE"] = arrayOf(it) }
             song.lyrics?.let { propertyMap["LYRICS"] = arrayOf(it) }
+            song.composer?.let { propertyMap["COMPOSER"] = arrayOf(it) }
+            if (song.discNumber > 0) propertyMap["DISCNUMBER"] = arrayOf(song.discNumber.toString())
+            song.albumArtist?.let { propertyMap["ALBUMARTIST"] = arrayOf(it) }
+            song.comment?.let { propertyMap["COMMENT"] = arrayOf(it) }
+            if (song.trackNumber > 0) propertyMap["TRACKNUMBER"] = arrayOf(song.trackNumber.toString())
             song.artistMbid?.let { propertyMap["MUSICBRAINZ_ARTISTID"] = arrayOf(it) }
             song.albumMbid?.let { propertyMap["MUSICBRAINZ_ALBUMID"] = arrayOf(it) }
             
@@ -379,7 +384,7 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
         null
     }
 
-    suspend fun getSongs(): List<Song> = withContext(Dispatchers.IO) {
+    suspend fun getSongs(ignoreNoMedia: Boolean = false): List<Song> = withContext(Dispatchers.IO) {
         val excludedFolders = metadataDao.getAllExcludedFolders().map { it.path }
         val songs = mutableListOf<Song>()
         val projection = arrayOf(
@@ -439,6 +444,8 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
 
                 if (!File(path).exists()) continue
                 
+                if (!ignoreNoMedia && File(File(path).parent, ".nomedia").exists()) continue
+
                 if (excludedFolders.any { path.startsWith(it) }) continue
 
                 val songKey = path
@@ -486,7 +493,11 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                             totalPlayTimeMs = cached?.totalPlayTimeMs ?: 0,
                             manualNotPodcast = cached?.manualNotPodcast ?: false,
                             lyrics = cached?.lyrics,
-                            trackGain = cached?.trackGain
+                            trackGain = cached?.trackGain,
+                            composer = cached?.composer,
+                            discNumber = cached?.discNumber ?: 0,
+                            albumArtist = cached?.albumArtist,
+                            comment = cached?.comment
                         ))
                     } catch (e: Exception) {}
                 }
@@ -494,8 +505,12 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                 var trackGain = cached?.trackGain
                 var lyrics = cached?.lyrics
                 var currentGenre = cached?.genre ?: genre
+                var composer = cached?.composer
+                var discNumber = cached?.discNumber ?: 0
+                var albumArtist = cached?.albumArtist
+                var comment = cached?.comment
                 
-                if (trackGain == null || lyrics == null || currentGenre == null) {
+                if (trackGain == null || lyrics == null || currentGenre == null || composer == null || albumArtist == null) {
                     try {
                         ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
                             val metadata = TagLib.getMetadata(pfd.dup().detachFd())
@@ -512,6 +527,19 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                             if (currentGenre == null) {
                                 currentGenre = metadata?.propertyMap?.get("GENRE")?.firstOrNull()
                                               ?: metadata?.propertyMap?.get("genre")?.firstOrNull()
+                            }
+                            if (composer == null) {
+                                composer = metadata?.propertyMap?.get("COMPOSER")?.firstOrNull()
+                            }
+                            if (discNumber == 0) {
+                                discNumber = metadata?.propertyMap?.get("DISCNUMBER")?.firstOrNull()?.toIntOrNull() ?: 0
+                            }
+                            if (albumArtist == null) {
+                                albumArtist = metadata?.propertyMap?.get("ALBUMARTIST")?.firstOrNull()
+                                             ?: metadata?.propertyMap?.get("ALBUM ARTIST")?.firstOrNull()
+                            }
+                            if (comment == null) {
+                                comment = metadata?.propertyMap?.get("COMMENT")?.firstOrNull()
                             }
                         }
                     } catch (e: Exception) {}
@@ -544,10 +572,87 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                     dateAdded = dateAdded,
                     manualNotPodcast = cached?.manualNotPodcast ?: false,
                     lyrics = lyrics,
-                    trackGain = trackGain
+                    trackGain = trackGain,
+                    composer = composer,
+                    discNumber = discNumber,
+                    albumArtist = albumArtist,
+                    comment = comment
                 ))
             }
         }
+
+        val videoProjection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.TITLE,
+            MediaStore.Video.Media.ARTIST,
+            MediaStore.Video.Media.ALBUM,
+            MediaStore.Video.Media.DURATION,
+            MediaStore.Video.Media.DISPLAY_NAME,
+            MediaStore.Video.Media.DATA,
+            MediaStore.Video.Media.DATE_ADDED
+        )
+        val videoCollection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        
+        context.contentResolver.query(videoCollection, videoProjection, null, null, null)?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
+            val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.ARTIST)
+            val albumColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.ALBUM)
+            val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+            val displayColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+            val dataColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+            val dateAddedColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idColumn)
+                val path = cursor.getString(dataColumn) ?: ""
+                
+                val isInAllowedFolder = path.contains("/Music/", ignoreCase = true) || 
+                                       path.contains("/Download/", ignoreCase = true) ||
+                                       path.contains("/Movies/", ignoreCase = true)
+                if (!isInAllowedFolder) continue
+
+                if (!File(path).exists()) continue
+                if (!ignoreNoMedia && File(File(path).parent, ".nomedia").exists()) continue
+                if (excludedFolders.any { path.startsWith(it) }) continue
+
+                val title = cursor.getString(titleColumn) ?: "Unknown Video"
+                val artist = cursor.getString(artistColumn) ?: "Unknown Artist"
+                val album = cursor.getString(albumColumn) ?: "Video"
+                val duration = cursor.getLong(durationColumn)
+                val filename = cursor.getString(displayColumn) ?: ""
+                val dateAdded = cursor.getLong(dateAddedColumn)
+                val uri = ContentUris.withAppendedId(videoCollection, id)
+
+                val cached = metadataDao.getMetadata(path)
+
+                songs.add(Song(
+                    id = id,
+                    title = cached?.enrichedTitle ?: title,
+                    artist = cached?.enrichedArtist ?: artist,
+                    album = cached?.enrichedAlbum ?: album,
+                    duration = duration,
+                    uri = uri,
+                    albumId = -1,
+                    path = path,
+                    filename = filename,
+                    artistMbid = cached?.artistMbid,
+                    albumMbid = cached?.albumMbid,
+                    artistImageUrl = cached?.artistImageUrl,
+                    albumImageUrl = cached?.albumImageUrl,
+                    genre = cached?.genre ?: "Music Video",
+                    isHidden = cached?.isHidden ?: false,
+                    manualOverride = cached?.manualOverride ?: false,
+                    isFavorite = cached?.isFavorite ?: false,
+                    playCount = cached?.playCount ?: 0,
+                    lastPlayed = cached?.lastPlayed ?: 0,
+                    totalPlayTimeMs = cached?.totalPlayTimeMs ?: 0,
+                    dateAdded = dateAdded,
+                    isVideo = true
+                ))
+            }
+        }
+
         try { retriever.release() } catch (e: Exception) {}
         songs.distinctBy { it.path }
     }
@@ -577,7 +682,12 @@ class MusicRepository(private val context: Context, val metadataDao: MetadataDao
                 totalPlayTimeMs = song.totalPlayTimeMs,
                 manualNotPodcast = song.manualNotPodcast,
                 lyrics = song.lyrics,
-                trackGain = song.trackGain
+                trackGain = song.trackGain,
+                isVideo = song.isVideo,
+                composer = song.composer,
+                discNumber = song.discNumber,
+                albumArtist = song.albumArtist,
+                comment = song.comment
             ))
         }
     }

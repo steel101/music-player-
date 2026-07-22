@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
-import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -43,6 +42,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.steel101.musicplayer.MusicApplication
 import com.steel101.musicplayer.data.Song
 
+@kotlin.OptIn(UnstableApi::class)
 class MusicService : MediaLibraryService() {
 
     private var mediaSession: MediaLibrarySession? = null
@@ -60,6 +60,7 @@ class MusicService : MediaLibraryService() {
     private var reverbPreset: Int = 0
     private var isReplayGainEnabled = false
     private var currentTrackGain: Float = 0f
+    private var isBitPerfectEnabled = false
 
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
@@ -67,7 +68,6 @@ class MusicService : MediaLibraryService() {
     private var dynamicsProcessing: DynamicsProcessing? = null
     private var presetReverb: PresetReverb? = null
 
-    @OptIn(UnstableApi::class)
     private fun initAudioEffects(audioSessionId: Int) {
         if (audioSessionId == C.AUDIO_SESSION_ID_UNSET) return
         
@@ -117,6 +117,15 @@ class MusicService : MediaLibraryService() {
     }
 
     private fun applyAllSettings() {
+        if (isBitPerfectEnabled) {
+            equalizer?.enabled = false
+            bassBoost?.enabled = false
+            virtualizer?.enabled = false
+            dynamicsProcessing?.enabled = false
+            presetReverb?.enabled = false
+            return
+        }
+
         val maxBands = equalizer?.numberOfBands?.toInt() ?: 0
         eqBands.forEach { (band, level) ->
             if (band < maxBands) {
@@ -192,7 +201,6 @@ class MusicService : MediaLibraryService() {
 
     private var crossfadeDurationMs: Long = 2000
 
-    @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
 
@@ -318,6 +326,42 @@ class MusicService : MediaLibraryService() {
                                         .setIsBrowsable(true)
                                         .setIsPlayable(false)
                                         .build()
+                                ).build(),
+                            androidx.media3.common.MediaItem.Builder()
+                                .setMediaId("ARTISTS")
+                                .setMediaMetadata(
+                                    androidx.media3.common.MediaMetadata.Builder()
+                                        .setTitle("Artists")
+                                        .setIsBrowsable(true)
+                                        .setIsPlayable(false)
+                                        .build()
+                                ).build(),
+                            androidx.media3.common.MediaItem.Builder()
+                                .setMediaId("ALBUMS")
+                                .setMediaMetadata(
+                                    androidx.media3.common.MediaMetadata.Builder()
+                                        .setTitle("Albums")
+                                        .setIsBrowsable(true)
+                                        .setIsPlayable(false)
+                                        .build()
+                                ).build(),
+                            androidx.media3.common.MediaItem.Builder()
+                                .setMediaId("GENRES")
+                                .setMediaMetadata(
+                                    androidx.media3.common.MediaMetadata.Builder()
+                                        .setTitle("Genres")
+                                        .setIsBrowsable(true)
+                                        .setIsPlayable(false)
+                                        .build()
+                                ).build(),
+                            androidx.media3.common.MediaItem.Builder()
+                                .setMediaId("PLAYLISTS")
+                                .setMediaMetadata(
+                                    androidx.media3.common.MediaMetadata.Builder()
+                                        .setTitle("Playlists")
+                                        .setIsBrowsable(true)
+                                        .setIsPlayable(false)
+                                        .build()
                                 ).build()
                         )
                         Futures.immediateFuture(LibraryResult.ofItemList(rootChildren, params))
@@ -328,7 +372,7 @@ class MusicService : MediaLibraryService() {
                             val songs = repository.getSongs()
                             val items = songs.map { song ->
                                 androidx.media3.common.MediaItem.Builder()
-                                    .setMediaId(song.id.toString())
+                                    .setMediaId("SONG_${song.id}")
                                     .setUri(song.uri)
                                     .setMediaMetadata(
                                         androidx.media3.common.MediaMetadata.Builder()
@@ -345,7 +389,137 @@ class MusicService : MediaLibraryService() {
                         }
                         settableFuture
                     }
-                    else -> Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
+                    "ARTISTS" -> {
+                        val settableFuture = com.google.common.util.concurrent.SettableFuture.create<LibraryResult<ImmutableList<androidx.media3.common.MediaItem>>>()
+                        scope.launch {
+                            val songs = repository.getSongs()
+                            val artists = songs.map { it.artist }.distinct().sorted()
+                            val items = artists.map { artist ->
+                                androidx.media3.common.MediaItem.Builder()
+                                    .setMediaId("ARTIST_$artist")
+                                    .setMediaMetadata(
+                                        androidx.media3.common.MediaMetadata.Builder()
+                                            .setTitle(artist)
+                                            .setIsBrowsable(true)
+                                            .setIsPlayable(false)
+                                            .build()
+                                    ).build()
+                            }
+                            settableFuture.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                        }
+                        settableFuture
+                    }
+                    "GENRES" -> {
+                        val settableFuture = com.google.common.util.concurrent.SettableFuture.create<LibraryResult<ImmutableList<androidx.media3.common.MediaItem>>>()
+                        scope.launch {
+                            val songs = repository.getSongs()
+                            val genres = songs.mapNotNull { it.genre }.distinct().sorted()
+                            val items = genres.map { genre ->
+                                androidx.media3.common.MediaItem.Builder()
+                                    .setMediaId("GENRE_$genre")
+                                    .setMediaMetadata(
+                                        androidx.media3.common.MediaMetadata.Builder()
+                                            .setTitle(genre)
+                                            .setIsBrowsable(true)
+                                            .setIsPlayable(false)
+                                            .build()
+                                    ).build()
+                            }
+                            settableFuture.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                        }
+                        settableFuture
+                    }
+                    "PLAYLISTS" -> {
+                        val settableFuture = com.google.common.util.concurrent.SettableFuture.create<LibraryResult<ImmutableList<androidx.media3.common.MediaItem>>>()
+                        scope.launch {
+                            val playlists = repository.getPlaylists()
+                            val items = playlists.map { playlist ->
+                                androidx.media3.common.MediaItem.Builder()
+                                    .setMediaId("PLAYLIST_${playlist.id}")
+                                    .setMediaMetadata(
+                                        androidx.media3.common.MediaMetadata.Builder()
+                                            .setTitle(playlist.name)
+                                            .setIsBrowsable(true)
+                                            .setIsPlayable(false)
+                                            .build()
+                                    ).build()
+                            }
+                            settableFuture.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                        }
+                        settableFuture
+                    }
+                    else -> {
+                        if (parentId.startsWith("ARTIST_")) {
+                            val artist = parentId.removePrefix("ARTIST_")
+                            val settableFuture = com.google.common.util.concurrent.SettableFuture.create<LibraryResult<ImmutableList<androidx.media3.common.MediaItem>>>()
+                            scope.launch {
+                                val songs = repository.getSongs().filter { it.artist == artist }
+                                val items = songs.map { song ->
+                                    androidx.media3.common.MediaItem.Builder()
+                                        .setMediaId("SONG_${song.id}")
+                                        .setUri(song.uri)
+                                        .setMediaMetadata(
+                                            androidx.media3.common.MediaMetadata.Builder()
+                                                .setTitle(song.title)
+                                                .setArtist(song.artist)
+                                                .setAlbumTitle(song.album)
+                                                .setIsBrowsable(false)
+                                                .setIsPlayable(true)
+                                                .build()
+                                        ).build()
+                                }
+                                settableFuture.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                            }
+                            settableFuture
+                        } else if (parentId.startsWith("GENRE_")) {
+                            val genre = parentId.removePrefix("GENRE_")
+                            val settableFuture = com.google.common.util.concurrent.SettableFuture.create<LibraryResult<ImmutableList<androidx.media3.common.MediaItem>>>()
+                            scope.launch {
+                                val songs = repository.getSongs().filter { it.genre == genre }
+                                val items = songs.map { song ->
+                                    androidx.media3.common.MediaItem.Builder()
+                                        .setMediaId("SONG_${song.id}")
+                                        .setUri(song.uri)
+                                        .setMediaMetadata(
+                                            androidx.media3.common.MediaMetadata.Builder()
+                                                .setTitle(song.title)
+                                                .setArtist(song.artist)
+                                                .setAlbumTitle(song.album)
+                                                .setIsBrowsable(false)
+                                                .setIsPlayable(true)
+                                                .build()
+                                        ).build()
+                                }
+                                settableFuture.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                            }
+                            settableFuture
+                        } else if (parentId.startsWith("PLAYLIST_")) {
+                            val playlistId = parentId.removePrefix("PLAYLIST_").toLongOrNull() ?: -1L
+                            val settableFuture = com.google.common.util.concurrent.SettableFuture.create<LibraryResult<ImmutableList<androidx.media3.common.MediaItem>>>()
+                            scope.launch {
+                                val songPaths = repository.getSongsInPlaylist(playlistId)
+                                val songs = repository.getSongs().filter { it.path in songPaths }
+                                val items = songs.map { song ->
+                                    androidx.media3.common.MediaItem.Builder()
+                                        .setMediaId("SONG_${song.id}")
+                                        .setUri(song.uri)
+                                        .setMediaMetadata(
+                                            androidx.media3.common.MediaMetadata.Builder()
+                                                .setTitle(song.title)
+                                                .setArtist(song.artist)
+                                                .setAlbumTitle(song.album)
+                                                .setIsBrowsable(false)
+                                                .setIsPlayable(true)
+                                                .build()
+                                        ).build()
+                                }
+                                settableFuture.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                            }
+                            settableFuture
+                        } else {
+                            Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
+                        }
+                    }
                 }
             }
 
@@ -409,6 +583,10 @@ class MusicService : MediaLibraryService() {
                         isReplayGainEnabled = args.getBoolean("enabled")
                         applyReplayGain()
                     }
+                    "SET_BIT_PERFECT_ENABLED" -> {
+                        isBitPerfectEnabled = args.getBoolean("enabled")
+                        applyAllSettings()
+                    }
                     "SET_PLAYBACK_SPEED" -> {
                         val speed = args.getFloat("speed")
                         exoPlayer.setPlaybackSpeed(speed)
@@ -466,13 +644,11 @@ class MusicService : MediaLibraryService() {
         val deviceId = device?.let { "${it.type}_${it.address}" } ?: "default"
 
         if (deviceId != currentDeviceId) {
-            // Save old volume
             currentDeviceId?.let { oldId ->
                 val sharedPrefs = getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
                 sharedPrefs.edit().putFloat("volume_$oldId", exoPlayer.volume).apply()
             }
             
-            // Restore new volume
             currentDeviceId = deviceId
             val sharedPrefs = getSharedPreferences("music_player_prefs", Context.MODE_PRIVATE)
             val savedVolume = sharedPrefs.getFloat("volume_$deviceId", 1.0f)

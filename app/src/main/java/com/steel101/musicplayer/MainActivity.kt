@@ -16,6 +16,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -79,8 +80,18 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val dominantColorVal = viewModel.dominantColor.value
-            val seedColor = if (dominantColorVal != 0xFF1C1B1F.toInt()) androidx.compose.ui.graphics.Color(dominantColorVal) else null
-            MusicPlayerTheme(seedColor = seedColor) {
+            val dynamicThemingEnabled = viewModel.dynamicThemingEnabled.collectAsState().value
+            
+            val seedColor = if (!dynamicThemingEnabled && dominantColorVal != 0xFF1C1B1F.toInt()) {
+                androidx.compose.ui.graphics.Color(dominantColorVal)
+            } else {
+                null
+            }
+
+            MusicPlayerTheme(
+                seedColor = seedColor,
+                dynamicColor = dynamicThemingEnabled
+            ) {
                 val pendingRequest = viewModel.pendingWriteRequest.value
                 LaunchedEffect(pendingRequest) {
                     pendingRequest?.let { pendingIntent ->

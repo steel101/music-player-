@@ -69,4 +69,13 @@ interface MetadataDao {
 
     @Delete
     suspend fun deleteExcludedFolder(folder: ExcludedFolderEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSmartPlaylist(playlist: SmartPlaylistEntity): Long
+
+    @Query("SELECT * FROM smart_playlists ORDER BY name ASC")
+    suspend fun getAllSmartPlaylists(): List<SmartPlaylistEntity>
+
+    @Delete
+    suspend fun deleteSmartPlaylist(playlist: SmartPlaylistEntity)
 }

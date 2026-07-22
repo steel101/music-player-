@@ -72,6 +72,7 @@ class DownloadService : Service() {
 
         val trackTitle = intent?.getStringExtra("trackTitle") ?: return START_NOT_STICKY
         val artistName = intent.getStringExtra("artistName") ?: return START_NOT_STICKY
+        val isVideo = intent.getBooleanExtra("isVideo", false)
         val trackKey = "$artistName - $trackTitle"
 
         if (DownloadStatus.downloadingTracks.value.containsKey(trackKey)) return START_NOT_STICKY
@@ -84,7 +85,7 @@ class DownloadService : Service() {
         }
 
         val job = serviceScope.launch {
-            startDownload(trackTitle, artistName, trackKey)
+            startDownload(trackTitle, artistName, trackKey, isVideo)
         }
         activeJobs[trackKey] = job
 
@@ -112,7 +113,7 @@ class DownloadService : Service() {
             .build()
     }
 
-    private suspend fun startDownload(trackTitle: String, artistName: String, trackKey: String) {
+    private suspend fun startDownload(trackTitle: String, artistName: String, trackKey: String, isVideo: Boolean) {
         DownloadStatus.updateProgress(trackKey, 0f)
         showNotification(trackTitle, trackKey, true, 0)
 
@@ -144,18 +145,31 @@ class DownloadService : Service() {
                     videoItem.thumbnails?.lastOrNull()?.url
                 }
                 
-                val audioStream = streamExtractor.audioStreams
-                    .filter { it.format?.suffix?.contains("m4a") == true }
-                    .maxByOrNull { it.bitrate }
-                    ?: streamExtractor.audioStreams.maxByOrNull { it.bitrate }
+                val mediaStream = if (isVideo) {
+                    streamExtractor.videoStreams
+                        .filter { it.format?.suffix?.contains("mp4") == true }
+                        .maxByOrNull { it.bitrate }
+                        ?: streamExtractor.videoStreams.maxByOrNull { it.bitrate }
+                } else {
+                    streamExtractor.audioStreams
+                        .filter { it.format?.suffix?.contains("m4a") == true }
+                        .maxByOrNull { it.bitrate }
+                        ?: streamExtractor.audioStreams.maxByOrNull { it.bitrate }
+                }
 
-                val streamUrl = audioStream?.url
+                val streamUrl = mediaStream?.url
                 if (streamUrl != null) {
-                    val musicFolder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-                    if (!musicFolder.exists()) musicFolder.mkdirs()
+                    val baseFolder = if (isVideo) {
+                        val moviesFolder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                        File(moviesFolder, "music player")
+                    } else {
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+                    }
                     
-                    val extension = audioStream.format?.suffix ?: "m4a"
-                    val finalFile = File(musicFolder, "$safeTrackKey.$extension")
+                    if (!baseFolder.exists()) baseFolder.mkdirs()
+                    
+                    val extension = mediaStream.format?.suffix ?: if (isVideo) "mp4" else "m4a"
+                    val finalFile = File(baseFolder, "$safeTrackKey.$extension")
                     outputFile = finalFile
                     
                     val request = Request.Builder()

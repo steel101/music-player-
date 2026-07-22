@@ -24,7 +24,22 @@ data class MetadataEntity(
     val totalPlayTimeMs: Long = 0,
     val manualNotPodcast: Boolean = false,
     val lyrics: String? = null,
-    val trackGain: Float? = null
+    val trackGain: Float? = null,
+    val bpm: Int? = null,
+    val musicalKey: String? = null,
+    val isVideo: Boolean = false,
+    val composer: String? = null,
+    val discNumber: Int = 0,
+    val albumArtist: String? = null,
+    val comment: String? = null
+)
+
+@Entity(tableName = "smart_playlists")
+data class SmartPlaylistEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val rulesJson: String,
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "playlists")
