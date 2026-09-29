@@ -1332,15 +1332,69 @@ class MusicViewModel(
             _artistBio.value = null
             _artistDiscography.value = emptyList()
             try {
-                val response = audioDbService.searchArtist(cleanName)
-                val artist = response.artists?.firstOrNull()
-                if (artist != null) {
-                    _artistBio.value = artist.biography
-                    val albumsResponse = audioDbService.getAlbums(artist.id!!)
-                    _artistDiscography.value = albumsResponse.albums?.sortedByDescending { it.year } ?: emptyList()
-                } else {
-                    _artistBio.value = "No biography found for this artist."
+                val primaryArtist = cleanName
+                    .split(Regex("(?i)\\s+(feat\\.?|ft\\.?|featuring|with|&|,|/)\\s+"))
+                    .firstOrNull()?.trim() ?: cleanName
+
+                var bioText: String? = null
+
+                // Get artist bio from AudioDB
+                try {
+                    var response = audioDbService.searchArtist(cleanName)
+                    var artist = response.artists?.firstOrNull()
+                    if (artist == null && primaryArtist != cleanName) {
+                        response = audioDbService.searchArtist(primaryArtist)
+                        artist = response.artists?.firstOrNull()
+                    }
+                    if (artist != null && !artist.biography.isNullOrBlank()) {
+                        bioText = artist.biography
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MusicViewModel", "Failed to fetch AudioDB bio", e)
                 }
+
+                _artistBio.value = bioText ?: "No biography found for this artist."
+
+                // Fetch full discography from iTunes API (up to 50 albums)
+                val albumList = mutableListOf<com.steel101.musicplayer.network.AudioDbAlbum>()
+                try {
+                    val itunesResponse = itunesService.search(primaryArtist, entity = "album", limit = 50)
+                    val itunesAlbums = itunesResponse.results
+                        ?.filter { item ->
+                            val aName = item.artistName ?: ""
+                            aName.contains(primaryArtist, ignoreCase = true) || primaryArtist.contains(aName, ignoreCase = true)
+                        }
+                        ?.distinctBy { it.collectionName?.lowercase()?.trim() }
+                        ?.map { item ->
+                            com.steel101.musicplayer.network.AudioDbAlbum(
+                                id = item.collectionName,
+                                title = item.collectionName,
+                                artist = item.artistName,
+                                year = item.releaseDate?.take(4),
+                                thumbUrl = item.artworkUrl100?.replace("100x100bb", "300x300bb")
+                            )
+                        } ?: emptyList()
+                    albumList.addAll(itunesAlbums)
+                } catch (e: Exception) {
+                    android.util.Log.e("MusicViewModel", "Failed iTunes discography search", e)
+                }
+
+                // Fallback to AudioDB getAlbums if iTunes returned no results
+                if (albumList.isEmpty()) {
+                    try {
+                        val response = audioDbService.searchArtist(primaryArtist)
+                        val artist = response.artists?.firstOrNull()
+                        if (artist?.id != null) {
+                            val albumsResponse = audioDbService.getAlbums(artist.id)
+                            albumsResponse.albums?.let { albumList.addAll(it) }
+                        }
+                    } catch (e: Exception) {}
+                }
+
+                _artistDiscography.value = albumList
+                    .distinctBy { it.title?.lowercase()?.trim() }
+                    .sortedByDescending { it.year ?: "" }
+
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Failed to fetch artist info", e)
                 _artistBio.value = "Failed to load biography. Please check your connection."
