@@ -1465,7 +1465,7 @@ class MusicViewModel(
 
     private val audioDbService: AudioDbService by lazy {
         Retrofit.Builder()
-            .baseUrl("https://www.theaudiodb.com/api/v1/json/2/")
+            .baseUrl("https://www.theaudiodb.com/api/v1/json/123/")
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(AudioDbService::class.java)
