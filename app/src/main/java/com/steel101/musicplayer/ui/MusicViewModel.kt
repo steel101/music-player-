@@ -957,57 +957,85 @@ class MusicViewModel(
 
                 var tracksList = emptyList<com.steel101.musicplayer.network.MBTrack>()
 
-                // 1. Try iTunes song search for this album & artist
+                // 1. Try MusicBrainz first for official complete album track list
                 try {
-                    val itunesResponse = itunesService.search(term = "$primaryArtist $albumTitle", entity = "song", limit = 50)
-                    val matchingSongs = itunesResponse.results
-                        ?.filter { item ->
+                    var query = "release:\"$albumTitle\" AND artist:\"$primaryArtist\""
+                    var searchResponse = musicBrainzService.searchRelease(query)
+                    var release = searchResponse.releases?.firstOrNull()
+
+                    if (release == null) {
+                        query = "release:\"$albumTitle\""
+                        searchResponse = musicBrainzService.searchRelease(query)
+                        release = searchResponse.releases?.firstOrNull()
+                    }
+
+                    if (release != null) {
+                        val details = musicBrainzService.getRelease(release.id)
+                        val mbTracks = details.media?.flatMap { it.tracks ?: emptyList() } ?: emptyList()
+                        if (mbTracks.isNotEmpty()) {
+                            tracksList = mbTracks.sortedBy { it.position }
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MusicViewModel", "Failed MB album tracks search", e)
+                }
+
+                // 2. Try iTunes lookup / search
+                var itunesTracks = emptyList<com.steel101.musicplayer.network.MBTrack>()
+                try {
+                    val albumSearch = itunesService.search(term = "$primaryArtist $albumTitle", entity = "album", limit = 10)
+                    val collection = albumSearch.results?.firstOrNull {
+                        val cName = it.collectionName ?: ""
+                        cName.contains(albumTitle, ignoreCase = true) || albumTitle.contains(cName, ignoreCase = true)
+                    } ?: albumSearch.results?.firstOrNull()
+
+                    val items = if (collection?.collectionId != null) {
+                        itunesService.lookup(id = collection.collectionId.toString(), entity = "song", limit = 200).results ?: emptyList()
+                    } else {
+                        itunesService.search(term = "$primaryArtist $albumTitle", entity = "song", limit = 100).results ?: emptyList()
+                    }
+
+                    itunesTracks = items
+                        .filter { !it.trackName.isNullOrBlank() }
+                        .filter { item ->
                             val cName = item.collectionName ?: ""
                             val aName = item.artistName ?: ""
-                            val tName = item.trackName
-                            !tName.isNullOrBlank() && 
-                            (cName.contains(albumTitle, ignoreCase = true) || albumTitle.contains(cName, ignoreCase = true)) &&
-                            (aName.contains(primaryArtist, ignoreCase = true) || primaryArtist.contains(aName, ignoreCase = true))
+                            cName.contains(albumTitle, ignoreCase = true) || albumTitle.contains(cName, ignoreCase = true) ||
+                                    aName.contains(primaryArtist, ignoreCase = true) || primaryArtist.contains(aName, ignoreCase = true)
                         }
-                        ?.distinctBy { it.trackName?.lowercase()?.trim() }
-                        ?.sortedBy { it.trackNumber ?: 999 }
-                        ?.mapIndexed { index, item ->
+                        .distinctBy { it.trackName?.lowercase()?.trim() }
+                        .sortedBy { it.trackNumber ?: 999 }
+                        .mapIndexed { index, item ->
                             com.steel101.musicplayer.network.MBTrack(
                                 id = item.trackName ?: index.toString(),
                                 position = item.trackNumber ?: (index + 1),
                                 title = item.trackName ?: "Unknown Track",
                                 recording = null
                             )
-                        } ?: emptyList()
-
-                    if (matchingSongs.isNotEmpty()) {
-                        tracksList = matchingSongs
-                    }
+                        }
                 } catch (e: Exception) {
                     android.util.Log.e("MusicViewModel", "Failed iTunes album tracks search", e)
                 }
 
-                // 2. Fallback to MusicBrainz if iTunes returns no tracks
+                // Pick whichever source returned MORE tracks
+                if (itunesTracks.size > tracksList.size) {
+                    tracksList = itunesTracks
+                }
+
+                // 3. Fallback to local library tracks for this album
                 if (tracksList.isEmpty()) {
-                    try {
-                        var query = "release:\"$albumTitle\" AND artist:\"$primaryArtist\""
-                        var searchResponse = musicBrainzService.searchRelease(query)
-                        var release = searchResponse.releases?.firstOrNull()
-
-                        if (release == null) {
-                            query = "release:\"$albumTitle\""
-                            searchResponse = musicBrainzService.searchRelease(query)
-                            release = searchResponse.releases?.firstOrNull()
-                        }
-
-                        if (release != null) {
-                            val details = musicBrainzService.getRelease(release.id)
-                            val mbTracks = details.media?.flatMap { it.tracks ?: emptyList() } ?: emptyList()
-                            tracksList = mbTracks.sortedBy { it.position }
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("MusicViewModel", "Failed MB album tracks search", e)
+                    val localTracks = _songs.value.filter {
+                        it.album.equals(albumTitle, ignoreCase = true) &&
+                                (it.artist.contains(primaryArtist, ignoreCase = true) || primaryArtist.contains(it.artist, ignoreCase = true))
+                    }.sortedBy { it.trackNumber }.mapIndexed { index, song ->
+                        com.steel101.musicplayer.network.MBTrack(
+                            id = song.id.toString(),
+                            position = if (song.trackNumber > 0) song.trackNumber else (index + 1),
+                            title = song.title,
+                            recording = null
+                        )
                     }
+                    tracksList = localTracks
                 }
 
                 _mbAlbumTracks.value = tracksList
@@ -1435,45 +1463,93 @@ class MusicViewModel(
 
                 _artistBio.value = bioText ?: "No biography found for this artist."
 
-                // Fetch full discography from iTunes API (up to 50 albums)
+                // Fetch full discography from ALL available sources (iTunes, AudioDB, MusicBrainz, Local Library)
                 val albumList = mutableListOf<com.steel101.musicplayer.network.AudioDbAlbum>()
+
+                // 1. Search iTunes for albums
                 try {
-                    val itunesResponse = itunesService.search(primaryArtist, entity = "album", limit = 50)
-                    val itunesAlbums = itunesResponse.results
-                        ?.filter { item ->
+                    val itunesResponse1 = itunesService.search(primaryArtist, entity = "album", limit = 100, attribute = "artistTerm")
+                    val itunesResponse2 = itunesService.search(primaryArtist, entity = "album", limit = 100)
+                    val combinedResults = (itunesResponse1.results ?: emptyList()) + (itunesResponse2.results ?: emptyList())
+
+                    val itunesAlbums = combinedResults
+                        .filter { item ->
                             val aName = item.artistName ?: ""
                             aName.contains(primaryArtist, ignoreCase = true) || primaryArtist.contains(aName, ignoreCase = true)
                         }
-                        ?.distinctBy { it.collectionName?.lowercase()?.trim() }
-                        ?.map { item ->
+                        .map { item ->
                             com.steel101.musicplayer.network.AudioDbAlbum(
-                                id = item.collectionName,
+                                id = item.collectionId?.toString() ?: item.collectionName,
                                 title = item.collectionName,
                                 artist = item.artistName,
                                 year = item.releaseDate?.take(4),
                                 thumbUrl = item.artworkUrl100?.replace("100x100bb", "300x300bb")
                             )
-                        } ?: emptyList()
+                        }
                     albumList.addAll(itunesAlbums)
                 } catch (e: Exception) {
                     android.util.Log.e("MusicViewModel", "Failed iTunes discography search", e)
                 }
 
-                // Fallback to AudioDB getAlbums if iTunes returned no results
-                if (albumList.isEmpty()) {
-                    try {
-                        val response = audioDbService.searchArtist(primaryArtist)
-                        val artist = response.artists?.firstOrNull()
-                        if (artist?.id != null) {
-                            val albumsResponse = audioDbService.getAlbums(artist.id)
-                            albumsResponse.albums?.let { albumList.addAll(it) }
-                        }
-                    } catch (e: Exception) {}
+                // 2. Search AudioDB for albums
+                try {
+                    var response = audioDbService.searchArtist(primaryArtist)
+                    var artist = response.artists?.firstOrNull()
+                    if (artist == null && primaryArtist != cleanName) {
+                        response = audioDbService.searchArtist(cleanName)
+                        artist = response.artists?.firstOrNull()
+                    }
+                    if (artist?.id != null) {
+                        val albumsResponse = audioDbService.getAlbums(artist.id)
+                        albumsResponse.albums?.let { albumList.addAll(it) }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MusicViewModel", "Failed AudioDB discography search", e)
                 }
 
-                _artistDiscography.value = albumList
-                    .distinctBy { it.title?.lowercase()?.trim() }
+                // 3. Search MusicBrainz for releases
+                try {
+                    val mbSearch = musicBrainzService.searchRelease("artist:\"$primaryArtist\"")
+                    val mbReleases = mbSearch.releases?.map { rel ->
+                        com.steel101.musicplayer.network.AudioDbAlbum(
+                            id = rel.id,
+                            title = rel.title,
+                            artist = primaryArtist,
+                            year = rel.date?.take(4),
+                            thumbUrl = null
+                        )
+                    } ?: emptyList()
+                    albumList.addAll(mbReleases)
+                } catch (e: Exception) {
+                    android.util.Log.e("MusicViewModel", "Failed MusicBrainz discography search", e)
+                }
+
+                // 4. Add local library albums for this artist
+                val localAlbums = _songs.value
+                    .filter { it.artist.contains(primaryArtist, ignoreCase = true) || primaryArtist.contains(it.artist, ignoreCase = true) }
+                    .groupBy { it.album }
+                    .map { (albumName, songs) ->
+                        val sampleSong = songs.firstOrNull()
+                        com.steel101.musicplayer.network.AudioDbAlbum(
+                            id = albumName,
+                            title = albumName,
+                            artist = primaryArtist,
+                            year = sampleSong?.year?.takeIf { it > 0 }?.toString(),
+                            thumbUrl = sampleSong?.albumImageUrl
+                        )
+                    }
+                albumList.addAll(localAlbums)
+
+                // Deduplicate by normalized album title, prioritizing entries with artwork
+                val mergedAlbums = albumList
+                    .filter { !it.title.isNullOrBlank() }
+                    .groupBy { MetadataCleaner.cleanString(it.title ?: "").lowercase() }
+                    .map { (_, group) ->
+                        group.firstOrNull { !it.thumbUrl.isNullOrBlank() } ?: group.first()
+                    }
                     .sortedByDescending { it.year ?: "" }
+
+                _artistDiscography.value = mergedAlbums
 
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Failed to fetch artist info", e)
@@ -2307,18 +2383,73 @@ class MusicViewModel(
     }
 
     fun playPreview(title: String, artist: String) {
-        if (!_isOnlineMode.value) return
+        if (title.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // First check local library
+                val localSong = _songs.value.firstOrNull { song ->
+                    song.title.equals(title, ignoreCase = true) &&
+                            (song.artist.contains(artist, ignoreCase = true) || artist.contains(song.artist, ignoreCase = true))
+                } ?: _songs.value.firstOrNull { song ->
+                    MetadataCleaner.cleanString(song.title).equals(MetadataCleaner.cleanString(title), ignoreCase = true) &&
+                            MetadataCleaner.cleanString(song.artist).contains(MetadataCleaner.cleanString(artist), ignoreCase = true)
+                }
+
+                if (localSong != null) {
+                    withContext(Dispatchers.Main) {
+                        playSong(localSong)
+                        android.widget.Toast.makeText(context, "Playing local song: ${localSong.title}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                if (!_isOnlineMode.value) {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(context, "Online features disabled", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Loading track: $title...", android.widget.Toast.LENGTH_SHORT).show()
+                }
+
                 val youtube = ServiceList.YouTube
-                val searchExtractor = youtube.getSearchExtractor("$artist - $title")
+                val cleanArtist = artist.split(Regex("(?i)\\s+(feat\\.?|ft\\.?|featuring|with|&|,|/)\\s+")).firstOrNull()?.trim() ?: artist
+                var searchExtractor = youtube.getSearchExtractor("$cleanArtist - $title")
                 searchExtractor.fetchPage()
-                val videoItem = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>().firstOrNull()
+
+                var videoItem = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>().firstOrNull()
+                if (videoItem == null) {
+                    searchExtractor = youtube.getSearchExtractor("$artist - $title")
+                    searchExtractor.fetchPage()
+                    videoItem = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>().firstOrNull()
+                }
+                if (videoItem == null) {
+                    searchExtractor = youtube.getSearchExtractor("$title $cleanArtist")
+                    searchExtractor.fetchPage()
+                    videoItem = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>().firstOrNull()
+                }
+                if (videoItem == null) {
+                    searchExtractor = youtube.getSearchExtractor(title)
+                    searchExtractor.fetchPage()
+                    videoItem = searchExtractor.initialPage.items.filterIsInstance<StreamInfoItem>().firstOrNull()
+                }
+
                 if (videoItem != null) {
-                    playYoutubePreview(videoItem)
+                    withContext(Dispatchers.Main) {
+                        playYoutubePreview(videoItem, forceAudio = true)
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(context, "Track not found online", android.widget.Toast.LENGTH_SHORT).show()
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MusicViewModel", "Failed to play preview for $title", e)
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Error playing track: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -2406,7 +2537,13 @@ class MusicViewModel(
             android.widget.Toast.makeText(context, "Opening video...", android.widget.Toast.LENGTH_SHORT).show()
         }
         viewModelScope.launch(Dispatchers.IO) {
-            val streamData = resolveStreamUrl(item.url, video = isVideo) ?: return@launch
+            val streamData = resolveStreamUrl(item.url, video = isVideo)
+            if (streamData == null) {
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(context, "Could not resolve stream for ${item.name}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
             val streamUrl = streamData.first
             val artworkUrl = streamData.second
 
@@ -2515,9 +2652,15 @@ class MusicViewModel(
                 
                 if (audioStream?.url != null) {
                     audioStream.url!! to streamExtractor.thumbnails?.firstOrNull()?.url
-                } else null
+                } else {
+                    val fallbackStream = streamExtractor.videoStreams.minByOrNull { it.bitrate }
+                    if (fallbackStream?.url != null) {
+                        fallbackStream.url!! to streamExtractor.thumbnails?.firstOrNull()?.url
+                    } else null
+                }
             }
         } catch (e: Exception) {
+            android.util.Log.e("MusicViewModel", "Failed to resolve stream URL for $url", e)
             null
         }
     }

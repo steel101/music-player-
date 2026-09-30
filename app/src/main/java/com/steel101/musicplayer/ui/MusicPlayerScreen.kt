@@ -1861,36 +1861,35 @@ fun ArtistBioDialog(
                         if (mbTracks.isEmpty()) {
                             Text("No tracks found.", color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(16.dp))
                         } else {
+                            val localSongs by viewModel.songs.collectAsState()
                             mbTracks.forEach { track ->
+                                val trackTitle = track.title ?: ""
+                                val inLibrary = localSongs.any {
+                                    it.title.equals(trackTitle, ignoreCase = true) &&
+                                            it.artist.contains(artistName, ignoreCase = true)
+                                }
                                 ListItem(
-                                    headlineContent = { Text("${track.position}. ${track.title}", color = Color.White) },
+                                    headlineContent = { Text("${track.position}. $trackTitle", color = Color.White) },
                                     supportingContent = {
-                                        val localSongs by viewModel.songs.collectAsState()
-                                        val inLibrary = localSongs.any {
-                                            it.title.equals(track.title, ignoreCase = true) &&
-                                                    it.artist.contains(artistName, ignoreCase = true)
-                                        }
                                         if (inLibrary) {
                                             Text(viewModel.translate("In Library"), color = Color.Green, fontWeight = FontWeight.Bold)
                                         }
                                     },
+                                    modifier = Modifier.clickable {
+                                        viewModel.playPreview(trackTitle, artistName)
+                                    },
                                     trailingContent = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(onClick = { viewModel.playPreview(track.title ?: "", artistName) }) {
-                                                Icon(Icons.Default.PlayArrow, "Preview", tint = Color.Yellow)
-                                            }
-                                            val localSongs by viewModel.songs.collectAsState()
-                                            val inLibrary = localSongs.any {
-                                                it.title.equals(track.title, ignoreCase = true) &&
-                                                        it.artist.contains(artistName, ignoreCase = true)
+                                            IconButton(onClick = { viewModel.playPreview(trackTitle, artistName) }) {
+                                                Icon(Icons.Default.PlayArrow, "Play", tint = Color.Yellow)
                                             }
                                             if (!inLibrary) {
-                                                val trackKey = "$artistName - ${track.title}"
+                                                val trackKey = "$artistName - $trackTitle"
                                                 val progress = downloadingTracks[trackKey]
                                                 if (progress != null) {
                                                     CircularProgressIndicator(progress = { progress!! }, modifier = Modifier.size(24.dp), color = Color.Yellow)
                                                 } else {
-                                                    IconButton(onClick = { viewModel.downloadFromYoutube(track.title ?: "", artistName) }) {
+                                                    IconButton(onClick = { viewModel.downloadFromYoutube(trackTitle, artistName) }) {
                                                         Icon(AppIcons.Download, null, tint = Color.Yellow)
                                                     }
                                                 }

@@ -8,6 +8,7 @@ data class ItunesResponse(
 )
 
 data class ItunesResult(
+    @SerializedName("collectionId") val collectionId: Long? = null,
     @SerializedName("artworkUrl100") val artworkUrl100: String?,
     @SerializedName("artistName") val artistName: String?,
     @SerializedName("collectionName") val collectionName: String?,
