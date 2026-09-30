@@ -951,16 +951,69 @@ class MusicViewModel(
             _isFetchingMbTracks.value = true
             _mbAlbumTracks.value = emptyList()
             try {
-                val query = "release:\"$albumTitle\" AND artist:\"$artistName\""
-                val searchResponse = musicBrainzService.searchRelease(query)
-                val release = searchResponse.releases?.firstOrNull()
-                if (release != null) {
-                    val details = musicBrainzService.getRelease(release.id)
-                    val tracks = details.media?.flatMap { it.tracks ?: emptyList() } ?: emptyList()
-                    _mbAlbumTracks.value = tracks.sortedBy { it.position }
+                val primaryArtist = artistName
+                    .split(Regex("(?i)\\s+(feat\\.?|ft\\.?|featuring|with|&|,|/)\\s+"))
+                    .firstOrNull()?.trim() ?: artistName.trim()
+
+                var tracksList = emptyList<com.steel101.musicplayer.network.MBTrack>()
+
+                // 1. Try iTunes song search for this album & artist
+                try {
+                    val itunesResponse = itunesService.search(term = "$primaryArtist $albumTitle", entity = "song", limit = 50)
+                    val matchingSongs = itunesResponse.results
+                        ?.filter { item ->
+                            val cName = item.collectionName ?: ""
+                            val aName = item.artistName ?: ""
+                            val tName = item.trackName
+                            !tName.isNullOrBlank() && 
+                            (cName.contains(albumTitle, ignoreCase = true) || albumTitle.contains(cName, ignoreCase = true)) &&
+                            (aName.contains(primaryArtist, ignoreCase = true) || primaryArtist.contains(aName, ignoreCase = true))
+                        }
+                        ?.distinctBy { it.trackName?.lowercase()?.trim() }
+                        ?.sortedBy { it.trackNumber ?: 999 }
+                        ?.mapIndexed { index, item ->
+                            com.steel101.musicplayer.network.MBTrack(
+                                id = item.trackName ?: index.toString(),
+                                position = item.trackNumber ?: (index + 1),
+                                title = item.trackName ?: "Unknown Track",
+                                recording = null
+                            )
+                        } ?: emptyList()
+
+                    if (matchingSongs.isNotEmpty()) {
+                        tracksList = matchingSongs
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("MusicViewModel", "Failed iTunes album tracks search", e)
                 }
+
+                // 2. Fallback to MusicBrainz if iTunes returns no tracks
+                if (tracksList.isEmpty()) {
+                    try {
+                        var query = "release:\"$albumTitle\" AND artist:\"$primaryArtist\""
+                        var searchResponse = musicBrainzService.searchRelease(query)
+                        var release = searchResponse.releases?.firstOrNull()
+
+                        if (release == null) {
+                            query = "release:\"$albumTitle\""
+                            searchResponse = musicBrainzService.searchRelease(query)
+                            release = searchResponse.releases?.firstOrNull()
+                        }
+
+                        if (release != null) {
+                            val details = musicBrainzService.getRelease(release.id)
+                            val mbTracks = details.media?.flatMap { it.tracks ?: emptyList() } ?: emptyList()
+                            tracksList = mbTracks.sortedBy { it.position }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MusicViewModel", "Failed MB album tracks search", e)
+                    }
+                }
+
+                _mbAlbumTracks.value = tracksList
+
             } catch (e: Exception) {
-                android.util.Log.e("MusicViewModel", "Failed to fetch MB tracks", e)
+                android.util.Log.e("MusicViewModel", "Failed to fetch album tracks", e)
             } finally {
                 _isFetchingMbTracks.value = false
             }
@@ -1351,6 +1404,33 @@ class MusicViewModel(
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("MusicViewModel", "Failed to fetch AudioDB bio", e)
+                }
+
+                // Fallback to Wikipedia if AudioDB has no biography
+                if (bioText.isNullOrBlank()) {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val client = okhttp3.OkHttpClient()
+                            val url = "https://en.wikipedia.org/api/rest_v1/page/summary/${java.net.URLEncoder.encode(primaryArtist, "UTF-8")}"
+                            val request = okhttp3.Request.Builder().url(url).addHeader("User-Agent", "MusicPlayerApp/1.0").build()
+                            client.newCall(request).execute().use { resp ->
+                                if (resp.isSuccessful) {
+                                    val body = resp.body?.string()
+                                    if (body != null) {
+                                        val gson = com.google.gson.Gson()
+                                        val json = gson.fromJson(body, com.google.gson.JsonObject::class.java)
+                                        val type = json.get("type")?.asString
+                                        val extract = json.get("extract")?.asString
+                                        if (type != "disambiguation" && !extract.isNullOrBlank()) {
+                                            bioText = extract
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MusicViewModel", "Failed Wikipedia bio fallback", e)
+                    }
                 }
 
                 _artistBio.value = bioText ?: "No biography found for this artist."

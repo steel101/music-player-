@@ -12,5 +12,7 @@ data class ItunesResult(
     @SerializedName("artistName") val artistName: String?,
     @SerializedName("collectionName") val collectionName: String?,
     @SerializedName("primaryGenreName") val primaryGenreName: String?,
-    @SerializedName("releaseDate") val releaseDate: String?
+    @SerializedName("releaseDate") val releaseDate: String?,
+    @SerializedName("trackName") val trackName: String? = null,
+    @SerializedName("trackNumber") val trackNumber: Int? = null
 )

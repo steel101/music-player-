@@ -12,8 +12,12 @@ data class AudioDbArtist(
     @SerializedName("strArtistThumb") val thumbUrl: String?,
     @SerializedName("strArtistLogo") val logoUrl: String?,
     @SerializedName("strArtistFanart") val fanartUrl: String?,
-    @SerializedName("strBiographyEN") val biography: String?
-)
+    @SerializedName("strBiography") val bio: String?,
+    @SerializedName("strBiographyEN") val bioEN: String?
+) {
+    val biography: String?
+        get() = bio?.ifBlank { null } ?: bioEN?.ifBlank { null }
+}
 
 data class AudioDbAlbumResponse(
     @SerializedName("album") val albums: List<AudioDbAlbum>?
